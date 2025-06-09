@@ -329,9 +329,12 @@ def approve_handler(history, owner, repo, reference_pr_url):
             )
             # We will just get the final result from the generator
             final_result = None
-            for res in stream_gen:
-                pass  # consume generator
-            final_result = getattr(stream_gen, "return", None)
+            try:
+                while True:
+                    # We are not interested in the streamed messages here, just the final result.
+                    next(stream_gen)
+            except StopIteration as e:
+                final_result = e.value
 
             if final_result and final_result.get("status") == "success":
                 result_text = final_result.get("result", "")

@@ -48,7 +48,7 @@ css = """
 .status-card {
     width: 100%
 }
-.control-panel .gradio-button {
+.control-panel button {
     background: linear-gradient(135deg, #ff8c8c 0%, #f9a889 100%) !important;
     color: white !important;
     border-radius: 12px !important;
@@ -57,7 +57,7 @@ css = """
     box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
     transition: all 0.3s ease-in-out !important;
 }
-.control-panel .gradio-button:hover {
+.control-panel button:hover {
     background: linear-gradient(135deg, #f9a889 0%, #ff8c8c 100%) !important;
     box-shadow: 0 6px 16px rgba(0,0,0,0.2) !important;
     transform: translateY(-2px) !important;
@@ -147,7 +147,7 @@ with gr.Blocks(
                                 placeholder="reference PR URL",
                             )
 
-                            save_config_btn = gr.Button("�� Save GitHub Config")
+                            save_config_btn = gr.Button("💾 Save GitHub Config")
                             approve_btn = gr.Button("✅ Generate GitHub PR")
                             restart_btn = gr.Button("🔄 Restart Translation")
 

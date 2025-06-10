@@ -49,18 +49,18 @@ css = """
     width: 100%
 }
 .control-panel .gradio-button {
-    background: #f97316 !important;
+    background: linear-gradient(135deg, #ff8c8c 0%, #f9a889 100%) !important;
     color: white !important;
-    border-radius: 8px !important;
+    border-radius: 12px !important;
     border: none !important;
     font-weight: 600 !important;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
-    transition: all 0.2s ease-in-out !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+    transition: all 0.3s ease-in-out !important;
 }
 .control-panel .gradio-button:hover {
-    background: #fb923c !important;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.15) !important;
-    transform: translateY(-1px) !important;
+    background: linear-gradient(135deg, #f9a889 0%, #ff8c8c 100%) !important;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.2) !important;
+    transform: translateY(-2px) !important;
 }
 """
 

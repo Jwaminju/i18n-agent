@@ -24,7 +24,7 @@ load_dotenv()
 
 css = """
 .gradio-container {
-    background: #ffd11e;
+    background: linear-gradient(135deg, #ffeda7 0%, #ffbebf 100%);
 }
 .chat-container {
     background: rgba(255, 255, 180, 0.25);
@@ -52,7 +52,7 @@ css = """
 
 
 # Create the main interface
-with gr.Blocks(css=css, title="🌐 HuggingFace i18n made easy") as demo:
+with gr.Blocks(css=css, title="🌐 Hugging Face i18n made easy") as demo:
 
     # Title
     with open("images/hfkr_logo.png", "rb") as img_file:
@@ -60,7 +60,7 @@ with gr.Blocks(css=css, title="🌐 HuggingFace i18n made easy") as demo:
     gr.Markdown(
         f'<img src="data:image/png;base64,{base64_img}" style="display: block; margin-left: auto; margin-right: auto; height: 15em;"/>'
     )
-    gr.Markdown('<h1 style="text-align: center;">🌐 HuggingFace i18n made easy</h1>')
+    gr.Markdown('<h1 style="text-align: center;">🌐 Hugging Face i18n made easy</h1>')
 
     # Content
     with gr.Row():

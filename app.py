@@ -111,10 +111,7 @@ with gr.Blocks(
                                 minimum=1,
                                 maximum=100,
                             )
-                            find_btn = gr.Button(
-                                "🔍 Find Files to Translate",
-                                variant="primary",
-                            )
+                            find_btn = gr.Button("🔍 Find Files to Translate")
 
                     with gr.TabItem("2. Translate", id=1):
                         with gr.Group():
@@ -128,9 +125,7 @@ with gr.Blocks(
                                 label="🔑 Anthropic API key for translation generation",
                                 type="password",
                             )
-                            start_translate_btn = gr.Button(
-                                "🚀 Start Translation", variant="primary"
-                            )
+                            start_translate_btn = gr.Button("🚀 Start Translation")
 
                     with gr.TabItem("3. Upload PR", id=2):
                         with gr.Group():
@@ -152,15 +147,9 @@ with gr.Blocks(
                                 placeholder="reference PR URL",
                             )
 
-                            save_config_btn = gr.Button(
-                                "💾 Save GitHub Config", variant="secondary"
-                            )
-                            approve_btn = gr.Button(
-                                "✅ Generate GitHub PR", variant="primary"
-                            )
-                            restart_btn = gr.Button(
-                                "🔄 Restart Translation", variant="secondary"
-                            )
+                            save_config_btn = gr.Button("�� Save GitHub Config")
+                            approve_btn = gr.Button("✅ Generate GitHub PR")
+                            restart_btn = gr.Button("🔄 Restart Translation")
 
             # Chat Controller
             with gr.Column(elem_classes=["control-panel"]):
@@ -170,7 +159,7 @@ with gr.Blocks(
                     container=False,
                     scale=4,
                 )
-                send_btn = gr.Button("Send", variant="primary", scale=1)
+                send_btn = gr.Button("Send", scale=1)
 
     # Event Handlers
 

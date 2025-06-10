@@ -52,7 +52,7 @@ css = """
 
 
 # Create the main interface
-with gr.Blocks(css=css, title="🌐 Hugging Face i18n made easy") as demo:
+with gr.Blocks(css=css, title=" 🌐 Hugging Face Transformers Docs i18n made easy") as demo:
 
     # Title
     with open("images/hfkr_logo.png", "rb") as img_file:
@@ -60,13 +60,13 @@ with gr.Blocks(css=css, title="🌐 Hugging Face i18n made easy") as demo:
     gr.Markdown(
         f'<img src="data:image/png;base64,{base64_img}" style="display: block; margin-left: auto; margin-right: auto; height: 15em;"/>'
     )
-    gr.Markdown('<h1 style="text-align: center;">🌐 Hugging Face i18n made easy</h1>')
+    gr.Markdown('<h1 style="text-align: center;"> 🌐 Hugging Face Transformers Docs i18n made easy</h1>')
 
     # Content
     with gr.Row():
         # Chat interface
         with gr.Column(scale=4, elem_classes=["chat-container"]):
-            gr.Markdown("### 🌐 HuggingFace i18n Agent")
+            gr.Markdown("### 🌐 Hugging Face i18n Agent")
 
             chatbot = gr.Chatbot(
                 value=[[None, get_welcome_message()]], scale=1, height=585
@@ -177,7 +177,7 @@ with gr.Blocks(css=css, title="🌐 Hugging Face i18n made easy") as demo:
         outputs=[chatbot, msg_input, status_display, control_tabs],
     )
 
-    # GitHub 설정 저장
+    # GitHub Config Save
     save_config_btn.click(
         fn=update_github_config,
         inputs=[github_token, github_owner, github_repo, reference_pr_url],

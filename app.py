@@ -48,11 +48,27 @@ css = """
 .status-card {
     width: 100%
 }
+.control-panel .gradio-button {
+    background: #f97316 !important;
+    color: white !important;
+    border-radius: 8px !important;
+    border: none !important;
+    font-weight: 600 !important;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+    transition: all 0.2s ease-in-out !important;
+}
+.control-panel .gradio-button:hover {
+    background: #fb923c !important;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15) !important;
+    transform: translateY(-1px) !important;
+}
 """
 
 
 # Create the main interface
-with gr.Blocks(css=css, title=" 🌐 Hugging Face Transformers Docs i18n made easy") as demo:
+with gr.Blocks(
+    css=css, title=" 🌐 Hugging Face Transformers Docs i18n made easy"
+) as demo:
 
     # Title
     with open("images/hfkr_logo.png", "rb") as img_file:
@@ -60,7 +76,9 @@ with gr.Blocks(css=css, title=" 🌐 Hugging Face Transformers Docs i18n made ea
     gr.Markdown(
         f'<img src="data:image/png;base64,{base64_img}" style="display: block; margin-left: auto; margin-right: auto; height: 15em;"/>'
     )
-    gr.Markdown('<h1 style="text-align: center;"> 🌐 Hugging Face Transformers Docs i18n made easy</h1>')
+    gr.Markdown(
+        '<h1 style="text-align: center;"> 🌐 Hugging Face Transformers Docs i18n made easy</h1>'
+    )
 
     # Content
     with gr.Row():
@@ -96,7 +114,6 @@ with gr.Blocks(css=css, title=" 🌐 Hugging Face Transformers Docs i18n made ea
                             find_btn = gr.Button(
                                 "🔍 Find Files to Translate",
                                 variant="primary",
-                                size="lg",
                             )
 
                     with gr.TabItem("2. Translate", id=1):

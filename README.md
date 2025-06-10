@@ -1,17 +1,3 @@
----
-title: I18n Agent
-emoji: 🤖
-colorFrom: blue
-colorTo: green
-sdk: gradio
-sdk_version: "5.33.0"
-app_file: app.py
-pinned: false
-tags:
-  - agent-demo-track
-  - Agents-MCP-Hackathon
----
-
 <div align="center">
 
 # 🌐 [i18n-agent] Hugging Face i18n made easy

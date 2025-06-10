@@ -52,7 +52,7 @@ def _extract_content_for_display(content: str) -> str:
 
 def get_welcome_message():
     """Initial welcome message with file finding controls"""
-    return """**👋 Welcome to 🌐 HuggingFace i18n Translation Agent!**
+    return """**👋 Welcome to 🌐 Hugging Face i18n Translation Agent!**
 
 I'll help you find files that need translation and translate them in a streamlined workflow.
 
@@ -149,7 +149,7 @@ def handle_general_message(message):
     message_lower = message.lower()
 
     if any(word in message_lower for word in ["help", "what", "how"]):
-        return """**🤖 I'm your HuggingFace i18n Translation Agent!**
+        return """**🤖 I'm your Hugging Face i18n Translation Agent!**
 
 I can help you:
 1. **🔍 Find files** that need translation

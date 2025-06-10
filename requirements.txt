@@ -1,0 +1,9 @@
+gradio==5.33.0
+requests
+pydantic
+langchain-anthropic
+python-dotenv
+langchain
+PyGithub
+langchain-core
+langchain-community 

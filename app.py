@@ -48,19 +48,41 @@ css = """
 .status-card {
     width: 100%
 }
-.control-panel button {
+.action-button {
     background: linear-gradient(135deg, #ff8c8c 0%, #f9a889 100%) !important;
     color: white !important;
-    border-radius: 12px !important;
     border: none !important;
     font-weight: 600 !important;
     box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
     transition: all 0.3s ease-in-out !important;
 }
-.control-panel button:hover {
+.action-button:hover {
     background: linear-gradient(135deg, #f9a889 0%, #ff8c8c 100%) !important;
     box-shadow: 0 6px 16px rgba(0,0,0,0.2) !important;
     transform: translateY(-2px) !important;
+}
+
+.simple-tabs .tab-nav button {
+    background: transparent !important;
+    color: #4A5568 !important;
+    box-shadow: none !important;
+    transform: none !important;
+    border: none !important;
+    border-bottom: 2px solid #E2E8F0 !important;
+    border-radius: 0 !important;
+    font-weight: 600 !important;
+}
+
+.simple-tabs .tab-nav button.selected {
+    color: #f97316 !important;
+    border-bottom: 2px solid #f97316 !important;
+}
+
+.simple-tabs .tab-nav button:hover {
+    background: #f3f4f6 !important;
+    color: #f97316 !important;
+    box-shadow: none !important;
+    transform: none !important;
 }
 """
 
@@ -97,7 +119,7 @@ with gr.Blocks(
                 gr.Markdown("### 🛠️ Quick Controls")
                 status_display = gr.HTML(update_status())
 
-                with gr.Tabs() as control_tabs:
+                with gr.Tabs(elem_classes="simple-tabs") as control_tabs:
                     with gr.TabItem("1. Find Files", id=0):
                         with gr.Group():
                             lang_dropdown = gr.Dropdown(
@@ -111,7 +133,10 @@ with gr.Blocks(
                                 minimum=1,
                                 maximum=100,
                             )
-                            find_btn = gr.Button("🔍 Find Files to Translate")
+                            find_btn = gr.Button(
+                                "🔍 Find Files to Translate",
+                                elem_classes="action-button",
+                            )
 
                     with gr.TabItem("2. Translate", id=1):
                         with gr.Group():
@@ -125,7 +150,9 @@ with gr.Blocks(
                                 label="🔑 Anthropic API key for translation generation",
                                 type="password",
                             )
-                            start_translate_btn = gr.Button("🚀 Start Translation")
+                            start_translate_btn = gr.Button(
+                                "🚀 Start Translation", elem_classes="action-button"
+                            )
 
                     with gr.TabItem("3. Upload PR", id=2):
                         with gr.Group():
@@ -147,9 +174,15 @@ with gr.Blocks(
                                 placeholder="reference PR URL",
                             )
 
-                            save_config_btn = gr.Button("💾 Save GitHub Config")
-                            approve_btn = gr.Button("✅ Generate GitHub PR")
-                            restart_btn = gr.Button("🔄 Restart Translation")
+                            save_config_btn = gr.Button(
+                                "💾 Save GitHub Config", elem_classes="action-button"
+                            )
+                            approve_btn = gr.Button(
+                                "✅ Generate GitHub PR", elem_classes="action-button"
+                            )
+                            restart_btn = gr.Button(
+                                "🔄 Restart Translation", elem_classes="action-button"
+                            )
 
             # Chat Controller
             with gr.Column(elem_classes=["control-panel"]):
@@ -159,7 +192,7 @@ with gr.Blocks(
                     container=False,
                     scale=4,
                 )
-                send_btn = gr.Button("Send", scale=1)
+                send_btn = gr.Button("Send", scale=1, elem_classes="action-button")
 
     # Event Handlers
 

@@ -24,7 +24,7 @@ load_dotenv()
 
 css = """
 .gradio-container {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #ffd11e;
 }
 .chat-container {
     background: rgba(255, 255, 180, 0.25);

@@ -1,3 +1,15 @@
+---
+title: i18n Agent - Contribute in Just 5 Minutes
+emoji: 🤗
+colorFrom: yellow
+colorTo: yellow
+sdk: gradio
+sdk_version: 5.33.1
+app_file: app.py
+pinned: false
+---
+
+
 <div align="center">
 
 # 🌐 [i18n-agent] Hugging Face i18n made easy

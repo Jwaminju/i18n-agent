@@ -6,10 +6,7 @@ colorTo: yellow
 sdk: gradio
 sdk_version: 5.33.1
 app_file: app.py
-pinned: true
-tags:
-- agent-demo-track
-- Agents-MCP-Hackathon
+pinned: false
 ---
 
 

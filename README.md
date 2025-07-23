@@ -54,9 +54,13 @@ This project was specifically created to solve [Hugging Face Transformers Issue 
 
 ## 🎥 Demo Video
 
+<<<<<<< HEAD
 *Click image to link to demo video*
 [![image/png](https://cdn-uploads.huggingface.co/production/uploads/644a081386e837e3d58831e8/ElUN6EarvTX9qWdaPCNlk.png)](https://youtu.be/Xym6w9bMQXM)
 🔗 https://youtu.be/Xym6w9bMQXM
+=======
+[Hugging Face i18n Agent Demo](https://youtu.be/J2MBMNk7la8?si=7867ztaU2nPN0UEo)
+>>>>>>> 20fa31d (Add pr duplication check)
 
 *Watch the complete walkthrough: from setup to PR creation in under 5 minutes*
 

@@ -8,6 +8,7 @@ import gradio as gr
 
 from agent.workflow import (
     report_translation_target_files,
+    report_in_translation_status_files,
     translate_docs_interactive,
     generate_github_pr,
 )
@@ -70,22 +71,29 @@ def process_file_search_handler(lang: str, k: int, history: list) -> tuple:
     state.step = "find_files"
 
     status_report, files_list = report_translation_target_files(lang, k)
-    state.files_to_translate = [file[0] for file in files_list] if files_list else []
+    in_progress_status_report, in_progress_docs = report_in_translation_status_files(
+        lang
+    )
+    state.files_to_translate = (
+        [file[0] for file in files_list if file[0] not in in_progress_docs]
+        if files_list
+        else []
+    )
 
     response = f"""**✅ File search completed!**
 
 **Status Report:**
 {status_report}
-
+{in_progress_status_report}
 **📁 Found first {len(state.files_to_translate)} files to translate:**
 """
 
     if state.files_to_translate:
-        for i, file in enumerate(state.files_to_translate[:5], 1):  # Show first 5
+        for i, file in enumerate(state.files_to_translate, 1):
             response += f"\n{i}. `{file}`"
 
-        if len(state.files_to_translate) > 5:
-            response += f"\n... and {len(state.files_to_translate) - 5} more files"
+        # if len(state.files_to_translate) > 5:
+        #     response += f"\n... and {len(state.files_to_translate) - 5} more files"
 
         response += "\n\n**🚀 Ready to start translation?**\nI can begin translating these files one by one. Would you like to proceed?"
     else:
@@ -96,7 +104,18 @@ def process_file_search_handler(lang: str, k: int, history: list) -> tuple:
     cleared_input = ""
     selected_tab = 1 if state.files_to_translate else 0
 
-    return history, cleared_input, update_status(), gr.Tabs(selected=selected_tab)
+    # 드롭다운 choices로 쓸 파일 리스트 반환 추가
+    return (
+        history,
+        cleared_input,
+        update_status(),
+        gr.Tabs(selected=selected_tab),
+        update_dropdown_choices(state.files_to_translate),
+    )
+
+
+def update_dropdown_choices(file_list):
+    return gr.update(choices=file_list, value=None)
 
 
 def start_translation_process():
@@ -124,18 +143,19 @@ def start_translation_process():
         original_file_link = (
             "https://github.com/huggingface/transformers/blob/main/" + current_file
         )
+        print("Compeleted translation:\n")
+        print(translated)
+        print("----------------------------")
         response = (
-            f"""🔄 Translation for: `{current_file}`**\n"""
+            f"""🔄 Translation for: `{current_file}`\n"""
             "**📄 Original Content Link:**\n"
             ""
             f"{original_file_link}\n"
             "**🌐 Translated Content:**\n"
-            f"\n```\n\n{_extract_content_for_display(translated)}```\n"
-            f"{status}\n"
+            f"\n```\n\n{_extract_content_for_display(translated)}\n```"
+            # f"{status}\n"
+            # "✅ Translation completed. The code block will be added when generating PR."
         )
-        print("translated:")
-        print(translated)
-        print("extracted")
 
     except Exception as e:
         response = f"❌ Translation failed: {str(e)}"
@@ -294,8 +314,10 @@ def send_message(message, history):
 
 
 # Button handlers with tab switching
-def start_translate_handler(history, anthropic_key):
+def start_translate_handler(history, anthropic_key, file_to_translate):
     os.environ["ANTHROPIC_API_KEY"] = anthropic_key
+
+    state.files_to_translate = [file_to_translate]
     new_hist, cleared_input = handle_user_message("start translation", history)
     selected_tabs = 2 if state.current_file_content["translated"] else 0
     return new_hist, cleared_input, update_status(), gr.Tabs(selected=selected_tabs)

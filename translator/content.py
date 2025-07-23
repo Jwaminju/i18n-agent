@@ -5,6 +5,8 @@ import requests
 from langchain.callbacks import get_openai_callback
 from langchain_anthropic import ChatAnthropic
 
+from translator.prompt_glossary import PROMPT_WITH_GLOSSARY
+
 
 def get_content(filepath: str) -> str:
     url = string.Template(
@@ -38,10 +40,11 @@ def get_full_prompt(language: str, to_translate: str) -> str:
         "What do these sentences about Hugging Face Transformers "
         "(a machine learning library) mean in $language? "
         "Please do not translate the word after a 🤗 emoji "
-        "as it is a product name. Output only the translated markdown result "
-        "without any explanations or introductions.\n\n```md"
+        "as it is a product name. Output the complete markdown file**, with prose translated and all other content intact"
+        "No explanations or extras—only the translated markdown"
+        "\n\n```md"
     ).safe_substitute(language=language)
-    return "\n".join([prompt, to_translate.strip(), "```"])
+    return "\n".join([prompt, to_translate.strip(), "```", PROMPT_WITH_GLOSSARY])
 
 
 def split_markdown_sections(markdown: str) -> list:
@@ -64,15 +67,23 @@ def make_scaffold(content: str, to_translate: str) -> string.Template:
     scaffold = content
     for i, text in enumerate(to_translate.split("\n\n")):
         scaffold = scaffold.replace(text, f"$hf_i18n_placeholder{i}", 1)
+    print("inner scaffold:")
+    print(scaffold)
     return string.Template(scaffold)
 
 
 def fill_scaffold(content: str, to_translate: str, translated: str) -> str:
     scaffold = make_scaffold(content, to_translate)
+    print("scaffold:")
+    print(scaffold.template)
     divided = split_markdown_sections(to_translate)
+    print("divided:")
+    print(divided)
     anchors = get_anchors(divided)
 
     translated = split_markdown_sections(translated)
+    print("translated:")
+    print(translated)
 
     translated[1::3] = [
         f"{korean_title} {anchors[i]}"

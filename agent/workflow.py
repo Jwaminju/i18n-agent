@@ -11,7 +11,7 @@ from translator.content import (
     llm_translate,
     preprocess_content,
 )
-from translator.retriever import report
+from translator.retriever import report, get_github_issue_open_pr
 
 # GitHub PR Agent import
 try:
@@ -38,6 +38,19 @@ def report_translation_target_files(
     return status_report, [[file] for file in filepath_list]
 
 
+def report_in_translation_status_files(translate_lang: str) -> tuple[str, list[str]]:
+    docs, pr_info_list = get_github_issue_open_pr(translate_lang)
+
+    status_report = ""
+    if docs:
+        status_report = f"""\n🤖 Found {len(docs)} in progress for translation.
+        """
+        for i, file in enumerate(docs):
+            status_report += f"\n{i+1}. `{file}`: {pr_info_list[i]}"
+        status_report += "\n"
+    return status_report, docs
+
+
 def translate_docs(lang: str, file_path: str) -> tuple[str, str]:
     """Translate documentation."""
     # step 1. Get content from file path
@@ -49,13 +62,17 @@ def translate_docs(lang: str, file_path: str) -> tuple[str, str]:
         translation_lang = "Korean"
     to_translate_with_prompt = get_full_prompt(translation_lang, to_translate)
 
+    print("to_translate_with_prompt:\n", to_translate_with_prompt)
+
     # step 3. Translate with LLM
     # TODO: MCP clilent 넘길 부분
     callback_result, translated_content = llm_translate(to_translate_with_prompt)
-
+    print("translated_content:\n")
+    print(translated_content)
     # step 4. Add scaffold to translation result
     translated_doc = fill_scaffold(content, to_translate, translated_content)
-
+    print("translated_doc:\n")
+    print(translated_doc)
     return callback_result, translated_doc
 
 
@@ -149,9 +166,7 @@ def generate_github_pr(
         print(f"   📁 File: {filepath}")
         print(f"   🌍 Language: {target_language}")
         print(f"   📊 Reference PR: {github_config['reference_pr_url']}")
-        print(
-            f"   🏠 Repository: {github_config['owner']}/{github_config['repo_name']}"
-        )
+        print(f"   🏠 Repository: {github_config['owner']}/{github_config['repo_name']}")
 
         agent = GitHubPRAgent()
         result = agent.run_translation_pr_workflow(

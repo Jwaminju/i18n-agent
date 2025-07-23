@@ -54,7 +54,7 @@ This project was specifically created to solve [Hugging Face Transformers Issue 
 
 ## 🎥 Demo Video
 
-[![Hugging Face i18n Agent Demo](https://img.youtube.com/vi/YOUR_VIDEO_ID/maxresdefault.jpg)](https://www.youtube.com/watch?v=YOUR_VIDEO_ID)
+[Hugging Face i18n Agent Demo](https://youtu.be/J2MBMNk7la8?si=7867ztaU2nPN0UEo)
 
 *Watch the complete walkthrough: from setup to PR creation in under 5 minutes*
 

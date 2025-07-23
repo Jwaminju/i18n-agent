@@ -44,6 +44,8 @@ css = """
     backdrop-filter: blur(8px);
     border: 1px solid rgba(255,255,180,0.25);
     width: 100%;
+    overflow: visible !important;
+
 }
 .status-card {
     width: 100%
@@ -91,7 +93,6 @@ css = """
 with gr.Blocks(
     css=css, title=" 🌐 Hugging Face Transformers Docs i18n made easy"
 ) as demo:
-
     # Title
     with open("images/hfkr_logo.png", "rb") as img_file:
         base64_img = base64.b64encode(img_file.read()).decode()
@@ -122,16 +123,15 @@ with gr.Blocks(
                 with gr.Tabs(elem_classes="simple-tabs") as control_tabs:
                     with gr.TabItem("1. Find Files", id=0):
                         with gr.Group():
-                            lang_dropdown = gr.Dropdown(
+                            lang_dropdown = gr.Radio(
                                 choices=[language.value for language in Languages],
                                 label="🌍 Translate To",
                                 value="ko",
                             )
                             k_input = gr.Number(
                                 label="📊 First k missing translated docs",
-                                value=1,
+                                value=10,
                                 minimum=1,
-                                maximum=100,
                             )
                             find_btn = gr.Button(
                                 "🔍 Find Files to Translate",
@@ -140,6 +140,17 @@ with gr.Blocks(
 
                     with gr.TabItem("2. Translate", id=1):
                         with gr.Group():
+                            files_to_translate = gr.Radio(
+                                choices=[],
+                                label="📄 Select a file to translate",
+                                interactive=True,
+                                value=[],
+                            )
+                            file_to_translate_input = gr.Textbox(
+                                label="🌍 Select in the dropdown or write the file path to translate",
+                                value="",
+                            )
+
                             translate_lang_display = gr.Dropdown(
                                 choices=[language.value for language in Languages],
                                 label="🌍 Translation Language",
@@ -186,7 +197,7 @@ with gr.Blocks(
 
             # Chat Controller
             with gr.Column(elem_classes=["control-panel"]):
-                gr.Markdown("### 💬 Chat with agent")
+                gr.Markdown("### 💬 Chat with agent (Only simple chat is available)")
                 msg_input = gr.Textbox(
                     placeholder="Type your message here... (e.g. 'what', 'how', or 'help')",
                     container=False,
@@ -199,7 +210,7 @@ with gr.Blocks(
     find_btn.click(
         fn=process_file_search_handler,
         inputs=[lang_dropdown, k_input, chatbot],
-        outputs=[chatbot, msg_input, status_display, control_tabs],
+        outputs=[chatbot, msg_input, status_display, control_tabs, files_to_translate],
     )
 
     # Sync language across tabs
@@ -209,10 +220,17 @@ with gr.Blocks(
         outputs=[translate_lang_display],
     )
 
+    #
+    files_to_translate.change(
+        fn=lambda x: x,
+        inputs=[files_to_translate],
+        outputs=[file_to_translate_input],
+    )
+
     # Button event handlers
     start_translate_btn.click(
         fn=start_translate_handler,
-        inputs=[chatbot, anthropic_key],
+        inputs=[chatbot, anthropic_key, file_to_translate_input],
         outputs=[chatbot, msg_input, status_display, control_tabs],
     )
 

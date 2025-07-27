@@ -422,11 +422,16 @@ def approve_handler(history, owner, repo, reference_pr_url):
         translated_content = state.current_file_content["translated"]
         response += "\n\n🚀 **Generating GitHub PR...**"
 
+        # Extract title from file for toctree mapping
+        file_name = current_file.split("/")[-1].replace(".md", "").replace("_", " ").title()
+        print(file_name)
+        
         pr_response = generate_github_pr(
             target_language=state.target_language,
             filepath=current_file,
             translated_content=translated_content,
             github_config=state.github_config,
+            en_title=file_name,
         )
         response += f"\n{pr_response}"
     else:

@@ -14,6 +14,7 @@ from agent.handler import (
     send_message,
     start_translate_handler,
     sync_language_displays,
+    update_prompt_preview,
     update_status,
     update_github_config,
 )
@@ -30,7 +31,7 @@ css = """
     background: rgba(255, 255, 180, 0.25);
     border-radius: 18px;
     box-shadow: 0 4px 24px rgba(0,0,0,0.08);
-    padding: 1.5em;
+    padding: 1.0em;
     backdrop-filter: blur(8px);
     border: 1px solid rgba(255,255,180,0.25);
     width: 100%;
@@ -40,7 +41,7 @@ css = """
     background: rgba(255, 255, 180, 0.25);
     border-radius: 18px;
     box-shadow: 0 4px 24px rgba(0,0,0,0.08);
-    padding: 1.5em;
+    padding: 1.0em;
     backdrop-filter: blur(8px);
     border: 1px solid rgba(255,255,180,0.25);
     width: 100%;
@@ -106,11 +107,12 @@ with gr.Blocks(
     # Content
     with gr.Row():
         # Chat interface
-        with gr.Column(scale=4, elem_classes=["chat-container"]):
+        with gr.Column(scale=3, elem_classes=["chat-container"]):
             gr.Markdown("### 🌐 Hugging Face i18n Agent")
 
             chatbot = gr.Chatbot(
-                value=[[None, get_welcome_message()]], scale=1, height=585
+                value=[[None, get_welcome_message()]], scale=1, height=585,
+                show_copy_button=True
             )
 
         # Controller interface
@@ -144,7 +146,7 @@ with gr.Blocks(
                                 choices=[],
                                 label="📄 Select a file to translate",
                                 interactive=True,
-                                value=[],
+                                value=None,
                             )
                             file_to_translate_input = gr.Textbox(
                                 label="🌍 Select in the dropdown or write the file path to translate",
@@ -161,6 +163,21 @@ with gr.Blocks(
                                 label="🔑 Anthropic API key for translation generation",
                                 type="password",
                             )
+                            additional_instruction = gr.Textbox(
+                                label="📝 Additional instructions (Optional - e.g., custom glossary)",
+                                placeholder="Example: Translate 'model' as '모델' consistently",
+                                lines=2,
+                            )
+                            
+                            with gr.Accordion("🔍 Preview Prompt", open=False):
+                                prompt_preview = gr.Textbox(
+                                    label="Current Translation Prompt",
+                                    lines=8,
+                                    interactive=False,
+                                    placeholder="Select a file and language to see the prompt preview...",
+                                    show_copy_button=True,
+                                )
+                            
                             start_translate_btn = gr.Button(
                                 "🚀 Start Translation", elem_classes="action-button"
                             )
@@ -230,7 +247,7 @@ with gr.Blocks(
     # Button event handlers
     start_translate_btn.click(
         fn=start_translate_handler,
-        inputs=[chatbot, anthropic_key, file_to_translate_input],
+        inputs=[chatbot, anthropic_key, file_to_translate_input, additional_instruction],
         outputs=[chatbot, msg_input, status_display, control_tabs],
     )
 
@@ -264,6 +281,14 @@ with gr.Blocks(
         inputs=[msg_input, chatbot],
         outputs=[chatbot, msg_input, status_display],
     )
+
+    # Update prompt preview when inputs change
+    for input_component in [translate_lang_display, file_to_translate_input, additional_instruction]:
+        input_component.change(
+            fn=update_prompt_preview,
+            inputs=[translate_lang_display, file_to_translate_input, additional_instruction],
+            outputs=[prompt_preview],
+        )
 
 root_path = os.environ.get("GRADIO_ROOT_PATH")
 demo.launch(root_path=root_path)

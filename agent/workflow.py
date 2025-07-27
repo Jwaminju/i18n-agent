@@ -53,6 +53,19 @@ def report_in_translation_status_files(translate_lang: str) -> tuple[str, list[s
 
 def translate_docs(lang: str, file_path: str, additional_instruction: str = "") -> tuple[str, str]:
     """Translate documentation."""
+    # Check if translation already exists
+    translation_file_path = (
+        Path(__file__).resolve().parent.parent
+        / f"translation_result/{file_path}"
+    )
+    
+    if translation_file_path.exists():
+        print(f"📄 Found existing translation: {translation_file_path}")
+        with open(translation_file_path, "r", encoding="utf-8") as f:
+            existing_content = f.read()
+        if existing_content.strip():
+            return "Existing translation loaded (no tokens used)", existing_content
+    
     # step 1. Get content from file path
     content = get_content(file_path)
     to_translate = preprocess_content(content)
@@ -105,6 +118,7 @@ def generate_github_pr(
     filepath: str,
     translated_content: str = None,
     github_config: dict = None,
+    en_title: str = None,
 ) -> str:
     """Generate a GitHub PR for translated documentation.
 
@@ -113,6 +127,7 @@ def generate_github_pr(
         filepath: Original file path (e.g., "docs/source/en/accelerator_selection.md")
         translated_content: Translated content (if None, read from file)
         github_config: GitHub configuration dictionary
+        en_title: English title for toctree mapping
 
     Returns:
         PR creation result message
@@ -168,14 +183,37 @@ def generate_github_pr(
             repo_name=github_config["repo_name"],
             base_branch=github_config.get("base_branch", "main"),
         )
+        # result = {
+        #     'status': 'partial_success', 
+        #     'branch': 'ko-attention_interface', 
+        #     'file_path': 'docs/source/ko/attention_interface.md', 
+        #     'message': 'File was saved and commit was successful.\nPR creation failed: ERROR: Existing PR found: https://github.com/Jwaminju/transformers/pull/1', 'error_details': 'ERROR: Existing PR found: https://github.com/Jwaminju/transformers/pull/1'
+        #     }
+        # Process toctree update after successful translation PR
+        toctree_result = None
+        if en_title:
+            from agent.toctree_handler import TocTreeHandler
+            toctree_handler = TocTreeHandler()
+            toctree_result = toctree_handler.update_toctree_after_translation(
+                result, en_title, filepath, agent, github_config
+            )
+            print("toctree_result:", toctree_result)
 
         # Process result
+        # Generate toctree status message (shared for both success and partial_success)
+        toctree_status = ""
+        if toctree_result:
+            if toctree_result["status"] == "success":
+                toctree_status = f"\n📋 **Toctree Updated:** ✅ {toctree_result['message']}"
+            else:
+                toctree_status = f"\n📋 **Toctree Update Failed:** ❌ {toctree_result['message']}"
+        
         if result["status"] == "success":
             return f"""✅ **GitHub PR Creation Successful!**
 
 🔗 **PR URL:** {result["pr_url"]}
 🌿 **Branch:** {result["branch"]}
-📁 **File:** {result["file_path"]}
+📁 **File:** {result["file_path"]}{toctree_status}
 
 {result["message"]}"""
 
@@ -183,7 +221,7 @@ def generate_github_pr(
             return f"""⚠️ **Partial Success**
 
 🌿 **Branch:** {result["branch"]}
-📁 **File:** {result["file_path"]}
+📁 **File:** {result["file_path"]}{toctree_status}
 
 {result["message"]}
 

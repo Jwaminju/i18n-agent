@@ -37,18 +37,33 @@ def get_github_issue_open_pr(lang: str = "ko"):
             "No Github issue has been registered to the server. (Only 'ko' is supported - please contact us to support this.)"
         )
 
-    url = f"https://api.github.com/repos/huggingface/transformers/pulls?state=open"
-
     headers = {
         "Accept": "application/vnd.github+json",
     }
-    response = requests.get(url, headers=headers)
+    
+    all_open_prs = []
+    page = 1
+    per_page = 100  # Maximum allowed by GitHub API
+    
+    while True:
+        url = f"https://api.github.com/repos/huggingface/transformers/pulls?state=open&page={page}&per_page={per_page}"
+        response = requests.get(url, headers=headers)
+        
+        if response.status_code != 200:
+            raise Exception(f"GitHub API error: {response.status_code} {response.text}")
+        
+        page_prs = response.json()
+        if not page_prs:  # No more PRs
+            break
+            
+        all_open_prs.extend(page_prs)
+        page += 1
+        
+        # Break if we got less than per_page results (last page)
+        if len(page_prs) < per_page:
+            break
 
-    if response.status_code != 200:
-        raise Exception(f"GitHub API error: {response.status_code} {response.text}")
-
-    open_prs = response.json()
-    filtered_prs = [pr for pr in open_prs if pr["title"].startswith("🌐 [i18n-KO]")]
+    filtered_prs = [pr for pr in all_open_prs if pr["title"].startswith("🌐 [i18n-KO]")]
 
     pattern = re.compile(r"`([^`]+\.md)`")
 

@@ -518,7 +518,7 @@ Please return only the commit message. No other explanation is needed."""
                     "status": "partial_success",
                     "branch": branch_name,
                     "file_path": target_filepath,
-                    "message": f"File was saved but PR creation failed: {pr_result}",
+                    "message": f"File was saved and commit was successful.\nPR creation failed: {pr_result}",
                     "error_details": pr_result,
                 }
             elif "successful" in pr_result and "http" in pr_result:

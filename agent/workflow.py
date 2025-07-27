@@ -51,7 +51,7 @@ def report_in_translation_status_files(translate_lang: str) -> tuple[str, list[s
     return status_report, docs
 
 
-def translate_docs(lang: str, file_path: str) -> tuple[str, str]:
+def translate_docs(lang: str, file_path: str, additional_instruction: str = "") -> tuple[str, str]:
     """Translate documentation."""
     # step 1. Get content from file path
     content = get_content(file_path)
@@ -60,7 +60,7 @@ def translate_docs(lang: str, file_path: str) -> tuple[str, str]:
     # step 2. Prepare prompt with docs content
     if lang == "ko":
         translation_lang = "Korean"
-    to_translate_with_prompt = get_full_prompt(translation_lang, to_translate)
+    to_translate_with_prompt = get_full_prompt(translation_lang, to_translate, additional_instruction)
 
     print("to_translate_with_prompt:\n", to_translate_with_prompt)
 
@@ -77,8 +77,8 @@ def translate_docs(lang: str, file_path: str) -> tuple[str, str]:
 
 
 def translate_docs_interactive(
-    translate_lang: str, selected_files: list[list[str]]
-) -> tuple[str, str, str]:
+    translate_lang: str, selected_files: list[list[str]], additional_instruction: str = ""
+) -> tuple[str, str]:
     """Interactive translation function that processes files one by one.
 
     Args:
@@ -87,27 +87,17 @@ def translate_docs_interactive(
     """
     # Extract file paths from the dataframe format
     file_paths = [row[0] for row in selected_files if row and len(row) > 0]
-    if not file_paths:
-        return (
-            "No files selected for translation.",
-            gr.update(visible=False),
-            gr.update(visible=False),
-            gr.update(visible=False),
-            [],
-            0,
-        )
 
     # Start with the first file
     current_file = file_paths[0]
 
     status = f"✅ Translation completed: `{current_file}` → `{translate_lang}`\n\n"
-    callback_result, translated_content = translate_docs(translate_lang, current_file)
+    callback_result, translated_content = translate_docs(translate_lang, current_file, additional_instruction)
     status += f"💰 Used token and cost: \n```\n{callback_result}\n```"
 
-    if len(file_paths) > 1:
-        status += f"\n### 📝 Note: Currently, only the first file has been translated.\n> The remaining {len(file_paths) - 1} files have not been processed yet, as the system is in its beta version"
+    print(status)
 
-    return status, translated_content
+    return translated_content
 
 
 def generate_github_pr(

@@ -8,10 +8,12 @@ import gradio as gr
 
 from agent.workflow import (
     report_translation_target_files,
+    report_in_translation_status_files,
     translate_docs_interactive,
     generate_github_pr,
 )
 from pr_generator.searcher import find_reference_pr_simple_stream
+from translator.content import get_full_prompt, get_content, preprocess_content
 
 
 # State management
@@ -21,6 +23,7 @@ class ChatState:
         self.target_language = "ko"
         self.k_files = 10
         self.files_to_translate = []
+        self.additional_instruction = ""
         self.current_file_content = {"translated": ""}
         self.pr_result = None  # Store PR creation result
         # GitHub configuration
@@ -70,22 +73,29 @@ def process_file_search_handler(lang: str, k: int, history: list) -> tuple:
     state.step = "find_files"
 
     status_report, files_list = report_translation_target_files(lang, k)
-    state.files_to_translate = [file[0] for file in files_list] if files_list else []
+    in_progress_status_report, in_progress_docs = report_in_translation_status_files(
+        lang
+    )
+    state.files_to_translate = (
+        [file[0] for file in files_list if file[0] not in in_progress_docs]
+        if files_list
+        else []
+    )
 
     response = f"""**✅ File search completed!**
 
 **Status Report:**
 {status_report}
-
+{in_progress_status_report}
 **📁 Found first {len(state.files_to_translate)} files to translate:**
 """
 
     if state.files_to_translate:
-        for i, file in enumerate(state.files_to_translate[:5], 1):  # Show first 5
+        for i, file in enumerate(state.files_to_translate, 1):
             response += f"\n{i}. `{file}`"
 
-        if len(state.files_to_translate) > 5:
-            response += f"\n... and {len(state.files_to_translate) - 5} more files"
+        # if len(state.files_to_translate) > 5:
+        #     response += f"\n... and {len(state.files_to_translate) - 5} more files"
 
         response += "\n\n**🚀 Ready to start translation?**\nI can begin translating these files one by one. Would you like to proceed?"
     else:
@@ -96,7 +106,18 @@ def process_file_search_handler(lang: str, k: int, history: list) -> tuple:
     cleared_input = ""
     selected_tab = 1 if state.files_to_translate else 0
 
-    return history, cleared_input, update_status(), gr.Tabs(selected=selected_tab)
+    # 드롭다운 choices로 쓸 파일 리스트 반환 추가
+    return (
+        history,
+        cleared_input,
+        update_status(),
+        gr.Tabs(selected=selected_tab),
+        update_dropdown_choices(state.files_to_translate),
+    )
+
+
+def update_dropdown_choices(file_list):
+    return gr.update(choices=file_list, value=None)
 
 
 def start_translation_process():
@@ -108,8 +129,8 @@ def start_translation_process():
 
     # Call translation function (simplified for demo)
     try:
-        status, translated = translate_docs_interactive(
-            state.target_language, [[current_file]]
+        translated = translate_docs_interactive(
+            state.target_language, [[current_file]], state.additional_instruction
         )
 
         state.current_file_content = {"translated": translated}
@@ -124,18 +145,24 @@ def start_translation_process():
         original_file_link = (
             "https://github.com/huggingface/transformers/blob/main/" + current_file
         )
+        print("Compeleted translation:\n")
+        print(translated)
+        print("----------------------------")
         response = (
-            f"""🔄 Translation for: `{current_file}`**\n"""
+            f"""🔄 Translation for: `{current_file}`\n"""
             "**📄 Original Content Link:**\n"
             ""
             f"{original_file_link}\n"
             "**🌐 Translated Content:**\n"
-            f"\n```\n\n{_extract_content_for_display(translated)}```\n"
-            f"{status}\n"
+            # f"\n```\n\n{_extract_content_for_display(translated)}\n```"
+            # "\n```\n\n"
+            # f"\n{translated}\n"
+            # f"```"
+            # f"{status}\n"
+            # "✅ Translation completed. The code block will be added when generating PR."
         )
-        print("translated:")
-        print(translated)
-        print("extracted")
+        return response, translated
+
 
     except Exception as e:
         response = f"❌ Translation failed: {str(e)}"
@@ -191,12 +218,14 @@ def handle_user_message(message, history):
         # User wants to start translation
         if state.files_to_translate:
             state.step = "translate"
-            response = start_translation_process()
+            response, translated = start_translation_process()
+            history.append([message, response])
+            history.append(["", translated])
+            return history, ""
         else:
             response = (
                 "❌ No files available for translation. Please search for files first."
             )
-
     # Handle GitHub PR creation - This part is removed as approve_handler is the main entry point
     else:
         # General response
@@ -288,14 +317,44 @@ def update_github_config(token, owner, repo, reference_pr_url):
     return f"✅ GitHub configuration updated: {owner}/{repo}"
 
 
+def update_prompt_preview(language, file_path, additional_instruction):
+    """Update prompt preview based on current settings"""
+    if not file_path.strip():
+        return "Select a file to see the prompt preview..."
+    
+    try:
+        # Get language name
+        if language == "ko":
+            translation_lang = "Korean"
+        else:
+            translation_lang = language
+        
+        # Get sample content (first 500 characters)
+        content = get_content(file_path)
+        to_translate = preprocess_content(content)
+        
+        # Truncate for preview
+        sample_content = to_translate[:500] + ("..." if len(to_translate) > 500 else "")
+        
+        # Generate prompt
+        prompt = get_full_prompt(translation_lang, sample_content, additional_instruction)
+        
+        return prompt
+    except Exception as e:
+        return f"Error generating prompt preview: {str(e)}"
+
+
 def send_message(message, history):
     new_history, cleared_input = handle_user_message(message, history)
     return new_history, cleared_input, update_status()
 
 
 # Button handlers with tab switching
-def start_translate_handler(history, anthropic_key):
+def start_translate_handler(history, anthropic_key, file_to_translate, additional_instruction=""):
     os.environ["ANTHROPIC_API_KEY"] = anthropic_key
+    
+    state.additional_instruction = additional_instruction
+    state.files_to_translate = [file_to_translate]
     new_hist, cleared_input = handle_user_message("start translation", history)
     selected_tabs = 2 if state.current_file_content["translated"] else 0
     return new_hist, cleared_input, update_status(), gr.Tabs(selected=selected_tabs)
@@ -363,11 +422,16 @@ def approve_handler(history, owner, repo, reference_pr_url):
         translated_content = state.current_file_content["translated"]
         response += "\n\n🚀 **Generating GitHub PR...**"
 
+        # Extract title from file for toctree mapping
+        file_name = current_file.split("/")[-1].replace(".md", "").replace("_", " ").title()
+        print(file_name)
+        
         pr_response = generate_github_pr(
             target_language=state.target_language,
             filepath=current_file,
             translated_content=translated_content,
             github_config=state.github_config,
+            en_title=file_name,
         )
         response += f"\n{pr_response}"
     else:

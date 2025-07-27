@@ -1,3 +1,4 @@
+import re
 import os
 from pathlib import Path
 
@@ -23,6 +24,59 @@ def get_github_repo_files():
         if item["type"] == "blob" and (item["path"].startswith("docs"))
     ]
     return file_paths
+
+
+def get_github_issue_open_pr(lang: str = "ko"):
+    """
+    Get open PR in the github issue, filtered by title starting with '🌐 [i18n-KO]'.
+    """
+    if lang == "ko":
+        issue_id = "20179"
+    else:
+        raise ValueError(
+            "No Github issue has been registered to the server. (Only 'ko' is supported - please contact us to support this.)"
+        )
+
+    headers = {
+        "Accept": "application/vnd.github+json",
+    }
+    
+    all_open_prs = []
+    page = 1
+    per_page = 100  # Maximum allowed by GitHub API
+    
+    while True:
+        url = f"https://api.github.com/repos/huggingface/transformers/pulls?state=open&page={page}&per_page={per_page}"
+        response = requests.get(url, headers=headers)
+        
+        if response.status_code != 200:
+            raise Exception(f"GitHub API error: {response.status_code} {response.text}")
+        
+        page_prs = response.json()
+        if not page_prs:  # No more PRs
+            break
+            
+        all_open_prs.extend(page_prs)
+        page += 1
+        
+        # Break if we got less than per_page results (last page)
+        if len(page_prs) < per_page:
+            break
+
+    filtered_prs = [pr for pr in all_open_prs if pr["title"].startswith("🌐 [i18n-KO]")]
+
+    pattern = re.compile(r"`([^`]+\.md)`")
+
+    filenames = [
+        "docs/source/en/" + match.group(1)
+        for pr in filtered_prs
+        if (match := pattern.search(pr["title"]))
+    ]
+    pr_info_list = [
+        f"https://github.com/huggingface/transformers/pull/{pr["url"].rstrip('/').split('/')[-1]}"
+        for pr in filtered_prs
+    ]
+    return filenames, pr_info_list
 
 
 def retrieve(summary: Summary, table_size: int = 10) -> tuple[str, list[str]]:

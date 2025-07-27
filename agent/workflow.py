@@ -11,7 +11,7 @@ from translator.content import (
     llm_translate,
     preprocess_content,
 )
-from translator.retriever import report
+from translator.retriever import report, get_github_issue_open_pr
 
 # GitHub PR Agent import
 try:
@@ -38,8 +38,34 @@ def report_translation_target_files(
     return status_report, [[file] for file in filepath_list]
 
 
-def translate_docs(lang: str, file_path: str) -> tuple[str, str]:
+def report_in_translation_status_files(translate_lang: str) -> tuple[str, list[str]]:
+    docs, pr_info_list = get_github_issue_open_pr(translate_lang)
+
+    status_report = ""
+    if docs:
+        status_report = f"""\n🤖 Found {len(docs)} in progress for translation.
+        """
+        for i, file in enumerate(docs):
+            status_report += f"\n{i+1}. `{file}`: {pr_info_list[i]}"
+        status_report += "\n"
+    return status_report, docs
+
+
+def translate_docs(lang: str, file_path: str, additional_instruction: str = "") -> tuple[str, str]:
     """Translate documentation."""
+    # Check if translation already exists
+    translation_file_path = (
+        Path(__file__).resolve().parent.parent
+        / f"translation_result/{file_path}"
+    )
+    
+    if translation_file_path.exists():
+        print(f"📄 Found existing translation: {translation_file_path}")
+        with open(translation_file_path, "r", encoding="utf-8") as f:
+            existing_content = f.read()
+        if existing_content.strip():
+            return "Existing translation loaded (no tokens used)", existing_content
+    
     # step 1. Get content from file path
     content = get_content(file_path)
     to_translate = preprocess_content(content)
@@ -47,21 +73,25 @@ def translate_docs(lang: str, file_path: str) -> tuple[str, str]:
     # step 2. Prepare prompt with docs content
     if lang == "ko":
         translation_lang = "Korean"
-    to_translate_with_prompt = get_full_prompt(translation_lang, to_translate)
+    to_translate_with_prompt = get_full_prompt(translation_lang, to_translate, additional_instruction)
+
+    print("to_translate_with_prompt:\n", to_translate_with_prompt)
 
     # step 3. Translate with LLM
     # TODO: MCP clilent 넘길 부분
     callback_result, translated_content = llm_translate(to_translate_with_prompt)
-
+    print("translated_content:\n")
+    print(translated_content)
     # step 4. Add scaffold to translation result
     translated_doc = fill_scaffold(content, to_translate, translated_content)
-
+    print("translated_doc:\n")
+    print(translated_doc)
     return callback_result, translated_doc
 
 
 def translate_docs_interactive(
-    translate_lang: str, selected_files: list[list[str]]
-) -> tuple[str, str, str]:
+    translate_lang: str, selected_files: list[list[str]], additional_instruction: str = ""
+) -> tuple[str, str]:
     """Interactive translation function that processes files one by one.
 
     Args:
@@ -70,27 +100,17 @@ def translate_docs_interactive(
     """
     # Extract file paths from the dataframe format
     file_paths = [row[0] for row in selected_files if row and len(row) > 0]
-    if not file_paths:
-        return (
-            "No files selected for translation.",
-            gr.update(visible=False),
-            gr.update(visible=False),
-            gr.update(visible=False),
-            [],
-            0,
-        )
 
     # Start with the first file
     current_file = file_paths[0]
 
     status = f"✅ Translation completed: `{current_file}` → `{translate_lang}`\n\n"
-    callback_result, translated_content = translate_docs(translate_lang, current_file)
+    callback_result, translated_content = translate_docs(translate_lang, current_file, additional_instruction)
     status += f"💰 Used token and cost: \n```\n{callback_result}\n```"
 
-    if len(file_paths) > 1:
-        status += f"\n### 📝 Note: Currently, only the first file has been translated.\n> The remaining {len(file_paths) - 1} files have not been processed yet, as the system is in its beta version"
+    print(status)
 
-    return status, translated_content
+    return translated_content
 
 
 def generate_github_pr(
@@ -98,6 +118,7 @@ def generate_github_pr(
     filepath: str,
     translated_content: str = None,
     github_config: dict = None,
+    en_title: str = None,
 ) -> str:
     """Generate a GitHub PR for translated documentation.
 
@@ -106,6 +127,7 @@ def generate_github_pr(
         filepath: Original file path (e.g., "docs/source/en/accelerator_selection.md")
         translated_content: Translated content (if None, read from file)
         github_config: GitHub configuration dictionary
+        en_title: English title for toctree mapping
 
     Returns:
         PR creation result message
@@ -149,9 +171,7 @@ def generate_github_pr(
         print(f"   📁 File: {filepath}")
         print(f"   🌍 Language: {target_language}")
         print(f"   📊 Reference PR: {github_config['reference_pr_url']}")
-        print(
-            f"   🏠 Repository: {github_config['owner']}/{github_config['repo_name']}"
-        )
+        print(f"   🏠 Repository: {github_config['owner']}/{github_config['repo_name']}")
 
         agent = GitHubPRAgent()
         result = agent.run_translation_pr_workflow(
@@ -163,14 +183,37 @@ def generate_github_pr(
             repo_name=github_config["repo_name"],
             base_branch=github_config.get("base_branch", "main"),
         )
+        # result = {
+        #     'status': 'partial_success', 
+        #     'branch': 'ko-attention_interface', 
+        #     'file_path': 'docs/source/ko/attention_interface.md', 
+        #     'message': 'File was saved and commit was successful.\nPR creation failed: ERROR: Existing PR found: https://github.com/Jwaminju/transformers/pull/1', 'error_details': 'ERROR: Existing PR found: https://github.com/Jwaminju/transformers/pull/1'
+        #     }
+        # Process toctree update after successful translation PR
+        toctree_result = None
+        if en_title:
+            from agent.toctree_handler import TocTreeHandler
+            toctree_handler = TocTreeHandler()
+            toctree_result = toctree_handler.update_toctree_after_translation(
+                result, en_title, filepath, agent, github_config
+            )
+            print("toctree_result:", toctree_result)
 
         # Process result
+        # Generate toctree status message (shared for both success and partial_success)
+        toctree_status = ""
+        if toctree_result:
+            if toctree_result["status"] == "success":
+                toctree_status = f"\n📋 **Toctree Updated:** ✅ {toctree_result['message']}"
+            else:
+                toctree_status = f"\n📋 **Toctree Update Failed:** ❌ {toctree_result['message']}"
+        
         if result["status"] == "success":
             return f"""✅ **GitHub PR Creation Successful!**
 
 🔗 **PR URL:** {result["pr_url"]}
 🌿 **Branch:** {result["branch"]}
-📁 **File:** {result["file_path"]}
+📁 **File:** {result["file_path"]}{toctree_status}
 
 {result["message"]}"""
 
@@ -178,7 +221,7 @@ def generate_github_pr(
             return f"""⚠️ **Partial Success**
 
 🌿 **Branch:** {result["branch"]}
-📁 **File:** {result["file_path"]}
+📁 **File:** {result["file_path"]}{toctree_status}
 
 {result["message"]}
 

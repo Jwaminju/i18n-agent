@@ -73,7 +73,7 @@ def get_github_issue_open_pr(lang: str = "ko"):
         if (match := pattern.search(pr["title"]))
     ]
     pr_info_list = [
-        f"https://github.com/huggingface/transformers/pull/{pr["url"].rstrip('/').split('/')[-1]}"
+        f"https://github.com/huggingface/transformers/pull/{pr['url'].rstrip('/').split('/')[-1]}"
         for pr in filtered_prs
     ]
     return filenames, pr_info_list

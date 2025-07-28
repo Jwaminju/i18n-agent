@@ -90,26 +90,7 @@ Korean title:"""
                 'local': local_file_path,
                 'title': en_title
             }
-    
-    def update_local_toctree_file(self, new_entries: List[Dict[str, str]]):
-        """Update or create local _toctree.yml file"""
-        toctree_path = os.path.join(self.local_docs_path, "_toctree.yml")
-        
-        os.makedirs(self.local_docs_path, exist_ok=True)
-        
-        if os.path.exists(toctree_path):
-            with open(toctree_path, 'r', encoding='utf-8') as f:
-                existing_data = yaml.safe_load(f) or []
-        else:
-            existing_data = []
-        
-        for entry in new_entries:
-            if entry not in existing_data:
-                existing_data.append(entry)
-        
-        with open(toctree_path, 'w', encoding='utf-8') as f:
-            yaml.dump(existing_data, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
-    
+   
     def create_updated_toctree_with_llm(self, en_toctree_yaml: str, ko_toctree_yaml: str, target_local: str) -> dict:
         """Use LLM to create updated Korean toctree with new entry at correct position"""
         try:
@@ -177,7 +158,7 @@ Example: If English entry is at position [1]['sections'][0] (1st item in section
             print(f"Error using LLM to create updated toctree: {e}")
             return None
 
-    def process_pr_commit(self, en_titles: List[str], local_paths: List[str], filepath: str):
+    def process_pr_commit(self, filepath: str):
         """Process PR commit by using LLM to create complete updated Korean toctree"""
         # Get filepath without prefix
         filepath_without_prefix = filepath.replace("docs/source/en/", "").replace(".md", "")
@@ -194,16 +175,12 @@ Example: If English entry is at position [1]['sections'][0] (1st item in section
         
         if not updated_ko_toctree:
             print(f"Failed to create updated Korean toctree for local: {filepath_without_prefix}")
-            return []
+            return
         
         print(f"LLM successfully updated Korean toctree")
         
         # Store the updated toctree for commit
         self.updated_ko_toctree = updated_ko_toctree
-        
-        print(f"Updated Korean toctree has {len(updated_ko_toctree)} items")
-        
-        return []
 
     def commit_and_push_toctree(self, pr_agent, owner: str, repo_name: str, branch_name: str):
         """Commit and push toctree updates as a separate commit"""
@@ -219,7 +196,7 @@ Example: If English entry is at position [1]['sections'][0] (1st item in section
             toctree_content = yaml.dump(ko_data, allow_unicode=True, default_flow_style=False, sort_keys=False)
             
             # Create toctree commit message
-            commit_message = "docs: update Korean documentation table of contents - test"
+            commit_message = "docs: update Korean documentation table of contents"
             
             # Commit toctree file
             file_result = pr_agent.create_or_update_file(
@@ -252,7 +229,6 @@ Example: If English entry is at position [1]['sections'][0] (1st item in section
     def update_toctree_after_translation(
         self,
         translation_result: dict, 
-        en_title: str, 
         filepath: str, 
         pr_agent, 
         github_config: dict
@@ -261,7 +237,6 @@ Example: If English entry is at position [1]['sections'][0] (1st item in section
         
         Args:
             translation_result: Result from translation PR workflow
-            en_title: English title for toctree mapping
             filepath: Original file path
             pr_agent: GitHub PR agent instance
             github_config: GitHub configuration dictionary
@@ -269,28 +244,22 @@ Example: If English entry is at position [1]['sections'][0] (1st item in section
         Returns:
             Dictionary with toctree update result
         """
-        if translation_result["status"] == "error" or not en_title:
+        if translation_result["status"] == "error":
             return None
             
         try:
-            local_path = filepath.split("/")[-1].replace(".md", "")
-            
-            # Create new toctree entries
-            new_entries = self.process_pr_commit([en_title], [local_path], filepath)
-            print("self.updated_ko_toctree = updated_ko_toctree:", self.updated_ko_toctree)
+            # Process toctree update with LLM
+            self.process_pr_commit(filepath)
             # Commit toctree as separate commit
-            return self.commit_and_push_toctree(
-                pr_agent=pr_agent,
-                owner=github_config["owner"],
-                repo_name=github_config["repo_name"],
-                branch_name=translation_result["branch"]
-            )
-            # return {
-            #     'status': 'success', 
-            #     'message': 'Toctree committed successfully: SUCCESS: File updated - docs/source/ko/_toctree.yml', 
-            #     'commit_message': 'docs: update Korean documentation table of contents'
-            #     }
-            
+            print("self.updated_ko_toctree:", self.updated_ko_toctree:)
+            if self.updated_ko_toctree:
+                return self.commit_and_push_toctree(
+                    pr_agent=pr_agent,
+                    owner=github_config["owner"],
+                    repo_name=github_config["repo_name"],
+                    branch_name=translation_result["branch"]
+                )
+
         except Exception as e:
             return {
                 "status": "error",

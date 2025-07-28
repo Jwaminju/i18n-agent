@@ -94,10 +94,17 @@ class GitHubPRAgent:
             if existing_pr:
                 return f"ERROR: {existing_pr}"
 
-            # 3. Verify head branch exists
+            # 3. Verify head and base branches exist
             repo = self.github_client.get_repo(f"{owner}/{repo_name}")
             try:
-                head_branch = repo.get_branch(head)
+                # For fork-to-upstream PR, head format is "fork_owner:branch_name"
+                if ":" in head:
+                    fork_owner, branch_name = head.split(":", 1)
+                    fork_repo = self.github_client.get_repo(f"{fork_owner}/{repo_name}")
+                    head_branch = fork_repo.get_branch(branch_name)
+                else:
+                    head_branch = repo.get_branch(head)
+
                 base_branch = repo.get_branch(base)
 
                 # 4. Check if head and base branches point to the same commit
@@ -159,7 +166,9 @@ class GitHubPRAgent:
         """Check if there's an existing PR with the same head and base."""
         try:
             repo = self.github_client.get_repo(f"{owner}/{repo_name}")
-            pulls = repo.get_pulls(state="open", head=f"{owner}:{head}", base=base)
+            # For head parameter, use exactly what was passed (could be "fork_owner:branch" or just "branch")
+            search_head = head if ":" in head else f"{owner}:{head}"
+            pulls = repo.get_pulls(state="open", head=search_head, base=base)
             for pr in pulls:
                 return f"Existing PR found: {pr.html_url}"
             return None
@@ -448,12 +457,12 @@ Please return only the commit message. No other explanation is needed."""
                 pr_analysis["head_branch"], target_language, file_name
             )
 
-            # 3. Get main branch SHA and create branch
-            repo = self.github_client.get_repo(f"{owner}/{repo_name}")
-            main_branch = repo.get_branch(base_branch)
+            # 3. Get main branch SHA from upstream and create branch in fork
+            upstream_repo = self.github_client.get_repo(f"huggingface/{repo_name}")
+            main_branch = upstream_repo.get_branch(base_branch)
             main_sha = main_branch.commit.sha
 
-            print(f"🌿 Creating branch: {branch_name}")
+            print(f"🌿 Creating branch: {branch_name} in fork repository")
             branch_result = self.create_branch(owner, repo_name, branch_name, main_sha)
 
             # Check branch creation result
@@ -466,8 +475,11 @@ Please return only the commit message. No other explanation is needed."""
             elif branch_result.startswith("WARNING"):
                 print(f"⚠️ {branch_result}")
                 # Continue if branch already exists
+            elif branch_result.startswith("SUCCESS"):
+                print(f"✅ {branch_result}")
             else:
-                print(f"{branch_result}")
+                print(f"⚠️ Unexpected branch creation result: {branch_result}")
+                # Continue anyway, might still work
 
             # 4. Generate commit message and save file
             commit_messages = [commit["message"] for commit in pr_analysis["commits"]]
@@ -506,10 +518,11 @@ Please return only the commit message. No other explanation is needed."""
             )
 
             print(f"🔄 Creating PR: {pr_title}")
-            print(f"   Head: {branch_name} → Base: {base_branch}")
+            print(f"   Head: {owner}:{branch_name} → Base: huggingface:{base_branch}")
 
+            # Create PR from fork to upstream repository
             pr_result = self.create_pull_request(
-                owner, repo_name, pr_title, branch_name, base_branch, pr_body
+                "huggingface", "transformers", pr_title, f"{owner}:{branch_name}", base_branch, pr_body
             )
 
             if pr_result.startswith("ERROR"):

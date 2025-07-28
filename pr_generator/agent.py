@@ -522,7 +522,7 @@ Please return only the commit message. No other explanation is needed."""
 
             # Create PR from fork to upstream repository
             pr_result = self.create_pull_request(
-                "huggingface", "transformers", pr_title, f"{owner}:{branch_name}", base_branch, pr_body
+                "huggingface", "transformers", pr_title, f"{owner}:{branch_name}", base_branch, pr_body, draft=True
             )
 
             if pr_result.startswith("ERROR"):

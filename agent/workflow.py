@@ -28,27 +28,34 @@ except ImportError as e:
 def report_translation_target_files(
     translate_lang: str, top_k: int = 1
 ) -> tuple[str, list[list[str]]]:
-    """Return the top-k files that need translation.
+    """Return the top-k files that need translation, excluding files already in progress.
 
     Args:
         translate_lang: Target language to translate
         top_k: Number of top-first files to return for translation. (Default 1)
     """
-    status_report, filepath_list = report(translate_lang, top_k)
-    return status_report, [[file] for file in filepath_list]
+    # Get files in progress
+    docs_in_progress, pr_info_list = get_github_issue_open_pr(translate_lang)
 
+    # Get all available files for translation
+    all_status_report, all_filepath_list = report(translate_lang, top_k * 2)  # Get more to account for filtering
 
-def report_in_translation_status_files(translate_lang: str) -> tuple[str, list[str]]:
-    docs, pr_info_list = get_github_issue_open_pr(translate_lang)
+    # Filter out files that are already in progress
+    available_files = [f for f in all_filepath_list if f not in docs_in_progress]
 
-    status_report = ""
-    if docs:
-        status_report = f"""\n🤖 Found {len(docs)} in progress for translation.
-        """
-        for i, file in enumerate(docs):
+    # Take only the requested number
+    filepath_list = available_files[:top_k]
+    
+    # Build combined status report
+    status_report = all_status_report
+
+    if docs_in_progress:
+        status_report += f"\n\n🤖 Found {len(docs_in_progress)} files in progress for translation:"
+        for i, file in enumerate(docs_in_progress):
             status_report += f"\n{i+1}. `{file}`: {pr_info_list[i]}"
-        status_report += "\n"
-    return status_report, docs
+        status_report += f"\n\n📋 Showing {len(filepath_list)} available files (excluding in-progress):"
+
+    return status_report, [[file] for file in filepath_list]
 
 
 def translate_docs(lang: str, file_path: str, additional_instruction: str = "") -> tuple[str, str]:
@@ -58,14 +65,14 @@ def translate_docs(lang: str, file_path: str, additional_instruction: str = "") 
         Path(__file__).resolve().parent.parent
         / f"translation_result/{file_path}"
     )
-    
+
     if translation_file_path.exists():
         print(f"📄 Found existing translation: {translation_file_path}")
         with open(translation_file_path, "r", encoding="utf-8") as f:
             existing_content = f.read()
         if existing_content.strip():
             return "Existing translation loaded (no tokens used)", existing_content
-    
+
     # step 1. Get content from file path
     content = get_content(file_path)
     to_translate = preprocess_content(content)
@@ -195,9 +202,8 @@ def generate_github_pr(
             from agent.toctree_handler import TocTreeHandler
             toctree_handler = TocTreeHandler()
             toctree_result = toctree_handler.update_toctree_after_translation(
-                result, en_title, filepath, agent, github_config
+                result, filepath, agent, github_config
             )
-            print("toctree_result:", toctree_result)
 
         # Process result
         # Generate toctree status message (shared for both success and partial_success)

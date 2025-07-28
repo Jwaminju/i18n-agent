@@ -8,7 +8,6 @@ import gradio as gr
 
 from agent.workflow import (
     report_translation_target_files,
-    report_in_translation_status_files,
     translate_docs_interactive,
     generate_github_pr,
 )
@@ -73,11 +72,8 @@ def process_file_search_handler(lang: str, k: int, history: list) -> tuple:
     state.step = "find_files"
 
     status_report, files_list = report_translation_target_files(lang, k)
-    in_progress_status_report, in_progress_docs = report_in_translation_status_files(
-        lang
-    )
     state.files_to_translate = (
-        [file[0] for file in files_list if file[0] not in in_progress_docs]
+        [file[0] for file in files_list]
         if files_list
         else []
     )
@@ -86,7 +82,7 @@ def process_file_search_handler(lang: str, k: int, history: list) -> tuple:
 
 **Status Report:**
 {status_report}
-{in_progress_status_report}
+
 **📁 Found first {len(state.files_to_translate)} files to translate:**
 """
 

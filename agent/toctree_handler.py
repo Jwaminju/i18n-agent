@@ -91,93 +91,107 @@ Korean title:"""
                 'title': en_title
             }
    
-    def create_updated_toctree_with_llm(self, en_toctree_yaml: str, ko_toctree_yaml: str, target_local: str) -> dict:
-        """Use LLM to create updated Korean toctree with new entry at correct position"""
-        try:
-            from translator.content import llm_translate
-            
-            prompt = f"""You are given English and Korean toctree YAML structures. You need to:
-
-1. Find the entry(local, title) with `- local: {target_local}` in the English toctree
-2. Translate its title to Korean
-3. Insert this new entry into the Korean toctree at the same position as it appears in the English toctree
-4. Return the complete updated Korean toctree
-
-English toctree YAML:
-```yaml
-{en_toctree_yaml}
-```
-
-Current Korean toctree YAML:
-```yaml
-{ko_toctree_yaml}
-```
-
-Target local path to add: "{target_local}"
-
-Return the complete updated Korean toctree in YAML format:
-```yaml
-# Updated Korean toctree with new entry inserted at correct position
-[complete toctree structure here]
-```
-
-Important positioning rules:
-- Find the exact position (index and nesting level) of the target entry in the English toctree
-- Count from the beginning: if it's the 5th item in English toctree, it should be the 5th item in Korean toctree
-- If it's inside a 'sections' array, maintain that nesting structure
-- Keep all existing Korean entries in their current positions
-- Insert the new Korean entry at the exact same position as the English entry
-- If there are gaps in positions (missing entries), maintain those gaps
-- Preserve the exact YAML structure: {{local: "path", title: "title"}} or {{local: "path", title: "title", sections: [...]}}
-
-Example: If English entry is at position [2] (3rd item), insert Korean entry at position [2] in Korean toctree
-Example: If English entry is at position [1]['sections'][0] (1st item in sections of 2nd entry), insert at same nested position"""
-            
-            callback_result, response = llm_translate(prompt)
-            
-            # Parse YAML response
-            response = response.strip()
-            
-            try:
-                # Extract YAML content between ```yaml and ```
-                if "```yaml" in response:
-                    yaml_start = response.find("```yaml") + 7
-                    yaml_end = response.find("```", yaml_start)
-                    yaml_content = response[yaml_start:yaml_end].strip()
-                else:
-                    yaml_content = response
+    def find_and_update_translation_entry(self, ko_toctree_data, target_local: str, english_title: str, korean_title: str):
+        """Find entry with '(번역중) 영어제목' and update it"""
+        target_title_pattern = f"(번역중) {english_title}"
+        
+        def process_item(item):
+            if isinstance(item, dict):
+                # Check if title matches the pattern
+                if item.get('title') == target_title_pattern:
+                    # Update local path and title
+                    item['local'] = target_local
+                    item['title'] = korean_title
+                    return True
                 
-                updated_ko_toctree = yaml.safe_load(yaml_content)
-                return updated_ko_toctree
-            except Exception as e:
-                print(f"Failed to parse LLM YAML response: {e}")
-                print(f"Response was: {response}")
-                return None
+                # Process sections recursively
+                if 'sections' in item:
+                    for section in item['sections']:
+                        if process_item(section):
+                            return True
+            return False
+        
+        # Process the toctree data
+        if isinstance(ko_toctree_data, list):
+            for item in ko_toctree_data:
+                if process_item(item):
+                    return True
+        return False
+
+    def create_updated_toctree_with_replacement(self, ko_toctree: list, target_local: str) -> list:
+        """Update Korean toctree by finding and updating translation entry"""
+        try:
+            # Step 1: Get English toctree and find the English title for target_local
+            en_toctree = self.get_en_toctree()
+            english_title = self.find_title_for_local(en_toctree, target_local)
+            
+            if not english_title:
+                print(f"Could not find English title for local: {target_local}")
+                return ko_toctree
+            
+            print(f"Found English title: {english_title} for local: {target_local}")
+            
+            # Step 2: Translate the English title to Korean
+            korean_title = self.translate_title(english_title)
+            print(f"Translated Korean title: {korean_title}")
+            
+            # Step 3: Make a deep copy to avoid modifying original
+            import copy
+            updated_toctree = copy.deepcopy(ko_toctree)
+            
+            # Step 4: Find and update the "(번역중) 영어제목" entry
+            updated = self.find_and_update_translation_entry(
+                updated_toctree, target_local, english_title, korean_title
+            )
+            
+            if updated:
+                print(f"Successfully updated translation entry: local={target_local}, title={korean_title}")
+                return updated_toctree
+            else:
+                print(f"Could not find '(번역중) {english_title}' entry to update")
+                return ko_toctree
                 
         except Exception as e:
-            print(f"Error using LLM to create updated toctree: {e}")
+            print(f"Error creating updated toctree: {e}")
+            return ko_toctree
+
+    def find_title_for_local(self, toctree_data, target_local: str):
+        """Find title for given local path in toctree"""
+        def search_item(item):
+            if isinstance(item, dict):
+                if item.get('local') == target_local:
+                    return item.get('title', '')
+                
+                if 'sections' in item:
+                    for section in item['sections']:
+                        result = search_item(section)
+                        if result:
+                            return result
             return None
+        
+        if isinstance(toctree_data, list):
+            for item in toctree_data:
+                result = search_item(item)
+                if result:
+                    return result
+        return None
 
     def process_pr_commit(self, filepath: str):
-        """Process PR commit by using LLM to create complete updated Korean toctree"""
+        """Process PR commit by updating Korean toctree with translated entry"""
         # Get filepath without prefix
         filepath_without_prefix = filepath.replace("docs/source/en/", "").replace(".md", "")
         
-        # Get English and Korean toctrees as YAML strings
-        en_toctree = self.get_en_toctree()
+        # Get Korean toctree
         ko_toctree = self.get_ko_toctree()
         
-        en_toctree_yaml = yaml.dump(en_toctree, allow_unicode=True, default_flow_style=False)
-        ko_toctree_yaml = yaml.dump(ko_toctree, allow_unicode=True, default_flow_style=False)
-        
-        # Use LLM to create updated Korean toctree
-        updated_ko_toctree = self.create_updated_toctree_with_llm(en_toctree_yaml, ko_toctree_yaml, filepath_without_prefix)
+        # Update Korean toctree with replacement logic
+        updated_ko_toctree = self.create_updated_toctree_with_replacement(ko_toctree, filepath_without_prefix)
         
         if not updated_ko_toctree:
             print(f"Failed to create updated Korean toctree for local: {filepath_without_prefix}")
             return
         
-        print(f"LLM successfully updated Korean toctree")
+        print(f"Successfully updated Korean toctree")
         
         # Store the updated toctree for commit
         self.updated_ko_toctree = updated_ko_toctree

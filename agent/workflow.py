@@ -215,6 +215,16 @@ def generate_github_pr(
                 toctree_status = f"\n📋 **Toctree Update Failed:** ❌ {toctree_result['message']}"
         
         if result["status"] == "success":
+            # Log successful PR to file
+            import datetime
+            log_entry = f"[{datetime.datetime.now().isoformat()}] {result['file_path']} -> {result['pr_url']}\n"
+            try:
+                with open("pr_success.log", "a", encoding="utf-8") as f:
+                    f.write(log_entry)
+                print(f"✅ Logged successful PR: {log_entry.strip()}")
+            except Exception as e:
+                print(f"❌ Failed to log PR success: {e}")
+            
             return f"""✅ **GitHub PR Creation Successful!**
 
 🔗 **PR URL:** {result["pr_url"]}

@@ -119,7 +119,7 @@ def update_dropdown_choices(file_list):
 def start_translation_process():
     """Start the translation process for the first file"""
     if not state.files_to_translate:
-        return "❌ No files available for translation."
+        return "❌ No files available for translation.", ""
 
     current_file = state.files_to_translate[0]
 
@@ -163,8 +163,7 @@ def start_translation_process():
     except Exception as e:
         response = f"❌ Translation failed: {str(e)}"
         response += "\n**➡️ Please try from the beginning.**"
-
-    return response
+        return response, ""
 
 
 def handle_general_message(message):

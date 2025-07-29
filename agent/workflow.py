@@ -217,23 +217,35 @@ def generate_github_pr(
         if result["status"] == "success":
             # Log successful PR to file
             import datetime
-            log_entry = f"[{datetime.datetime.now().isoformat()}] {result['file_path']} -> {result['pr_url']}\n"
+            pr_url = result.get('pr_url', 'NO_PR_URL')
+            log_entry = f"[{datetime.datetime.now().isoformat()}] {result['file_path']} -> {pr_url} ({result['status']})\n"
             try:
                 with open("pr_success.log", "a", encoding="utf-8") as f:
                     f.write(log_entry)
-                print(f"✅ Logged successful PR: {log_entry.strip()}")
+                print(f"✅ Logged PR result: {log_entry.strip()}")
             except Exception as e:
-                print(f"❌ Failed to log PR success: {e}")
+                print(f"❌ Failed to log PR result: {e}")
             
             return f"""✅ **GitHub PR Creation Successful!**
 
-🔗 **PR URL:** {result["pr_url"]}
+🔗 **PR URL:** {result.get('pr_url', 'NO_PR_URL')}
 🌿 **Branch:** {result["branch"]}
 📁 **File:** {result["file_path"]}{toctree_status}
 
 {result["message"]}"""
 
         elif result["status"] == "partial_success":
+            # Log partial success to file
+            import datetime
+            pr_url = result.get('pr_url', 'NO_PR_URL')
+            log_entry = f"[{datetime.datetime.now().isoformat()}] {result['file_path']} -> {pr_url} ({result['status']})\n"
+            try:
+                with open("pr_success.log", "a", encoding="utf-8") as f:
+                    f.write(log_entry)
+                print(f"✅ Logged PR result: {log_entry.strip()}")
+            except Exception as e:
+                print(f"❌ Failed to log PR result: {e}")
+                
             return f"""⚠️ **Partial Success**
 
 🌿 **Branch:** {result["branch"]}

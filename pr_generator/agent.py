@@ -68,19 +68,35 @@ class GitHubPRAgent:
 
     def append_to_log_file(
         self,
-        owner: str,
-        repo_name: str,
-        branch_name: str,
-        path: str,
         log_entry: str,
         commit_message: str = "chore(log): append PR result entry",
-        header_if_new: str = "# PR Success Log\n",
     ) -> str:
         """Append a log entry to a file on a specific branch using GitHub API.
 
-        Ensures the branch exists. Creates the file with a header if it does not exist; otherwise appends.
+        Target repository/branch/path are read from environment variables:
+        - LOG_REPO or LOG_REPO_OWNER + LOG_REPO_NAME
+        - LOG_BRANCH (default: 'log_event')
+        - LOG_FILE_PATH (default: 'pr_success.log')
         """
         try:
+            # Resolve target repo and path from environment/static settings
+            repo_spec = os.environ.get("LOG_REPO")
+            owner = None
+            repo_name = None
+            if repo_spec and "/" in repo_spec:
+                owner, repo_name = repo_spec.split("/", 1)
+            else:
+                owner = os.environ.get("LOG_REPO_OWNER")
+                repo_name = os.environ.get("LOG_REPO_NAME")
+
+            if not owner or not repo_name:
+                return (
+                    "log file append failed: 400 Missing LOG_REPO or LOG_REPO_OWNER/LOG_REPO_NAME"
+                )
+
+            branch_name = os.environ.get("LOG_BRANCH", "log_event")
+            path = os.environ.get("LOG_FILE_PATH", "pr_success.log")
+
             repo = self.github_client.get_repo(f"{owner}/{repo_name}")
 
             # Ensure branch exists; if not, create from default branch
@@ -118,12 +134,11 @@ class GitHubPRAgent:
                 return "SUCCESS: Log appended"
             except GithubException as e:
                 if e.status == 404:
-                    # File does not exist; create with header and first entry
-                    content_to_write = (header_if_new or "") + log_entry
+                    # File does not exist; create with first entry (pure JSONL line)
                     repo.create_file(
                         path=path,
                         message=commit_message,
-                        content=content_to_write,
+                        content=log_entry,
                         branch=branch_name,
                     )
                     return "SUCCESS: Log file created and first entry appended"

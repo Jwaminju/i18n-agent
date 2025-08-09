@@ -204,19 +204,11 @@ def generate_github_pr(
             else:
                 toctree_status = f"\n📋 **Toctree Update Failed:** ❌ {toctree_result['message']}"
 
-        # Append full result JSON to GitHub log file on 'log_event' branch (always)
+        # Append full result JSON to GitHub log file (always, env-configured repo/branch/path)
         try:
             import json
             log_entry = json.dumps(result, ensure_ascii=False) + "\n"
-            log_res = agent.append_to_log_file(
-                owner=github_config["owner"],
-                repo_name=github_config["repo_name"],
-                branch_name="log_event",
-                path="pr_success.log",
-                log_entry=log_entry,
-                # Ensure pure JSONL (no header)
-                header_if_new="",
-            )
+            log_res = agent.append_to_log_file(log_entry=log_entry)
             print(f"📝 Log append result: {log_res}")
         except Exception as e:
             print(f"❌ Failed to append PR log via GitHub API: {e}")

@@ -37,7 +37,6 @@ class GitHubPRAgent:
     def __init__(self):
         self._github_client = None
         self._llm = None
-        self._log_github_client = None
 
     @property
     def github_client(self) -> Optional[Github]:
@@ -66,104 +65,6 @@ class GitHubPRAgent:
                 temperature=DEFAULT_TEMPERATURE,
             )
         return self._llm
-
-    @property
-    def logging_github_client(self) -> Optional[Github]:
-        """Return GitHub API client for logging with optional separate token.
-
-        Uses LOG_GITHUB_TOKEN if set; otherwise falls back to GITHUB_TOKEN.
-        """
-        if not REQUIRED_LIBS_AVAILABLE:
-            raise ImportError("Required libraries not found.")
-
-        if self._log_github_client is None:
-            token = os.environ.get("LOG_GITHUB_TOKEN") or os.environ.get("GITHUB_TOKEN")
-            if not token:
-                print("Warning: LOG_GITHUB_TOKEN/GITHUB_TOKEN not set for logging.")
-                return Github()  # Limited access
-            self._log_github_client = Github(token)
-
-        return self._log_github_client
-
-    def append_to_log_file(
-        self,
-        log_entry: str,
-        commit_message: str = "chore(log): append PR result entry",
-    ) -> str:
-        """Append a log entry to a file on a specific branch using GitHub API.
-
-        Target repository/branch/path are read from environment variables:
-        - LOG_REPO or LOG_REPO_OWNER + LOG_REPO_NAME
-        - LOG_BRANCH (default: 'log_event')
-        - LOG_FILE_PATH (default: 'pr_success.log')
-        """
-        try:
-            # Resolve target repo and path from environment/static settings
-            repo_spec = os.environ.get("LOG_REPO")
-            owner = None
-            repo_name = None
-            if repo_spec and "/" in repo_spec:
-                owner, repo_name = repo_spec.split("/", 1)
-            else:
-                owner = os.environ.get("LOG_REPO_OWNER")
-                repo_name = os.environ.get("LOG_REPO_NAME")
-
-            if not owner or not repo_name:
-                return (
-                    "log file append failed: 400 Missing LOG_REPO or LOG_REPO_OWNER/LOG_REPO_NAME"
-                )
-
-            branch_name = os.environ.get("LOG_BRANCH", "log_event")
-            path = os.environ.get("LOG_FILE_PATH", "pr_success.log")
-
-            repo = self.logging_github_client.get_repo(f"{owner}/{repo_name}")
-
-            # Ensure branch exists; if not, create from default branch
-            try:
-                repo.get_branch(branch_name)
-            except GithubException as e:
-                if e.status == 404:
-                    try:
-                        base_branch = repo.default_branch
-                        base = repo.get_branch(base_branch)
-                        repo.create_git_ref(
-                            ref=f"refs/heads/{branch_name}", sha=base.commit.sha
-                        )
-                    except Exception as ce:
-                        return self._handle_github_error(ce, "branch ensure for logging")
-                else:
-                    return self._handle_github_error(e, "branch check for logging")
-
-            # Try to get existing file content on the branch and append
-            try:
-                existing_file = repo.get_contents(path, ref=branch_name)
-                import base64
-
-                existing_content = base64.b64decode(existing_file.content).decode(
-                    "utf-8"
-                )
-                new_content = existing_content + log_entry
-                repo.update_file(
-                    path=path,
-                    message=commit_message,
-                    content=new_content,
-                    sha=existing_file.sha,
-                    branch=branch_name,
-                )
-                return "SUCCESS: Log appended"
-            except GithubException as e:
-                if e.status == 404:
-                    # File does not exist; create with first entry (pure JSONL line)
-                    repo.create_file(
-                        path=path,
-                        message=commit_message,
-                        content=log_entry,
-                        branch=branch_name,
-                    )
-                    return "SUCCESS: Log file created and first entry appended"
-                return self._handle_github_error(e, "log file append")
-        except Exception as e:
-            return self._handle_github_error(e, "log file append")
 
     def _handle_github_error(self, e: Exception, operation: str) -> str:
         """Handle GitHub API errors consistently."""

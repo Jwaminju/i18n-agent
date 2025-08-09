@@ -215,16 +215,21 @@ def generate_github_pr(
                 toctree_status = f"\n📋 **Toctree Update Failed:** ❌ {toctree_result['message']}"
         
         if result["status"] == "success":
-            # Log successful PR to file
+            # Append PR result to GitHub log file on 'log_event' branch
             import datetime
             pr_url = result.get('pr_url', 'NO_PR_URL')
             log_entry = f"[{datetime.datetime.now().isoformat()}] {result['file_path']} -> {pr_url} ({result['status']})\n"
             try:
-                with open("pr_success.log", "a", encoding="utf-8") as f:
-                    f.write(log_entry)
-                print(f"✅ Logged PR result: {log_entry.strip()}")
+                log_res = agent.append_to_log_file(
+                    owner=github_config["owner"],
+                    repo_name=github_config["repo_name"],
+                    branch_name="log_event",
+                    path="pr_success.log",
+                    log_entry=log_entry,
+                )
+                print(f"📝 Log append result: {log_res}")
             except Exception as e:
-                print(f"❌ Failed to log PR result: {e}")
+                print(f"❌ Failed to append PR log via GitHub API: {e}")
             
             return f"""✅ **GitHub PR Creation Successful!**
 
@@ -235,16 +240,21 @@ def generate_github_pr(
 {result["message"]}"""
 
         elif result["status"] == "partial_success":
-            # Log partial success to file
+            # Append partial success to GitHub log file on 'log_event' branch
             import datetime
             pr_url = result.get('pr_url', 'NO_PR_URL')
             log_entry = f"[{datetime.datetime.now().isoformat()}] {result['file_path']} -> {pr_url} ({result['status']})\n"
             try:
-                with open("pr_success.log", "a", encoding="utf-8") as f:
-                    f.write(log_entry)
-                print(f"✅ Logged PR result: {log_entry.strip()}")
+                log_res = agent.append_to_log_file(
+                    owner=github_config["owner"],
+                    repo_name=github_config["repo_name"],
+                    branch_name="log_event",
+                    path="pr_success.log",
+                    log_entry=log_entry,
+                )
+                print(f"📝 Log append result: {log_res}")
             except Exception as e:
-                print(f"❌ Failed to log PR result: {e}")
+                print(f"❌ Failed to append PR log via GitHub API: {e}")
                 
             return f"""⚠️ **Partial Success**
 

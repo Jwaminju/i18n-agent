@@ -66,6 +66,71 @@ class GitHubPRAgent:
             )
         return self._llm
 
+    def append_to_log_file(
+        self,
+        owner: str,
+        repo_name: str,
+        branch_name: str,
+        path: str,
+        log_entry: str,
+        commit_message: str = "chore(log): append PR result entry",
+        header_if_new: str = "# PR Success Log\n",
+    ) -> str:
+        """Append a log entry to a file on a specific branch using GitHub API.
+
+        Ensures the branch exists. Creates the file with a header if it does not exist; otherwise appends.
+        """
+        try:
+            repo = self.github_client.get_repo(f"{owner}/{repo_name}")
+
+            # Ensure branch exists; if not, create from default branch
+            try:
+                repo.get_branch(branch_name)
+            except GithubException as e:
+                if e.status == 404:
+                    try:
+                        base_branch = repo.default_branch
+                        base = repo.get_branch(base_branch)
+                        repo.create_git_ref(
+                            ref=f"refs/heads/{branch_name}", sha=base.commit.sha
+                        )
+                    except Exception as ce:
+                        return self._handle_github_error(ce, "branch ensure for logging")
+                else:
+                    return self._handle_github_error(e, "branch check for logging")
+
+            # Try to get existing file content on the branch and append
+            try:
+                existing_file = repo.get_contents(path, ref=branch_name)
+                import base64
+
+                existing_content = base64.b64decode(existing_file.content).decode(
+                    "utf-8"
+                )
+                new_content = existing_content + log_entry
+                repo.update_file(
+                    path=path,
+                    message=commit_message,
+                    content=new_content,
+                    sha=existing_file.sha,
+                    branch=branch_name,
+                )
+                return "SUCCESS: Log appended"
+            except GithubException as e:
+                if e.status == 404:
+                    # File does not exist; create with header and first entry
+                    content_to_write = (header_if_new or "") + log_entry
+                    repo.create_file(
+                        path=path,
+                        message=commit_message,
+                        content=content_to_write,
+                        branch=branch_name,
+                    )
+                    return "SUCCESS: Log file created and first entry appended"
+                return self._handle_github_error(e, "log file append")
+        except Exception as e:
+            return self._handle_github_error(e, "log file append")
+
     def _handle_github_error(self, e: Exception, operation: str) -> str:
         """Handle GitHub API errors consistently."""
         if isinstance(e, GithubException):

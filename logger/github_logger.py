@@ -13,7 +13,7 @@ class GitHubLogger:
 
     Env vars:
       - LOG_GITHUB_TOKEN (fallback: GITHUB_TOKEN)
-      - LOG_REPO or LOG_REPO_OWNER + LOG_REPO_NAME
+      - LOG_REPO (format: owner/repo)
       - LOG_BRANCH (default: 'log_event')
       - LOG_FILE_PATH (default: 'pr_success.log')
     """
@@ -27,13 +27,9 @@ class GitHubLogger:
         self._client = Github(token)
 
         repo_spec = os.environ.get("LOG_REPO")
-        if repo_spec and "/" in repo_spec:
-            self.owner, self.repo_name = repo_spec.split("/", 1)
-        else:
-            self.owner = os.environ.get("LOG_REPO_OWNER")
-            self.repo_name = os.environ.get("LOG_REPO_NAME")
-        if not self.owner or not self.repo_name:
-            raise ValueError("Missing LOG_REPO or LOG_REPO_OWNER/LOG_REPO_NAME")
+        if not repo_spec or "/" not in repo_spec:
+            raise ValueError("Missing or invalid LOG_REPO. Expected 'owner/repo'.")
+        self.owner, self.repo_name = repo_spec.split("/", 1)
 
         self.branch = os.environ.get("LOG_BRANCH", "log_event")
         self.path = os.environ.get("LOG_FILE_PATH", "pr_success.log")

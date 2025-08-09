@@ -1,6 +1,6 @@
 ---
 title: i18n Agent - Contribute in Just 5 Minutes
-emoji: 🤗
+emoji: 🤖
 colorFrom: yellow
 colorTo: yellow
 sdk: gradio
@@ -80,7 +80,8 @@ git clone https://github.com/Hugging-Face-KREW/i18n-agent.git
 cd i18n-agent
 
 # Install dependencies  
-pip install -r requirements.txt
+make install
+source .venv/bin/activate
 
 # Set up your keys
 cp .env.example .env

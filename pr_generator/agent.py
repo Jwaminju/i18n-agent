@@ -37,6 +37,7 @@ class GitHubPRAgent:
     def __init__(self):
         self._github_client = None
         self._llm = None
+        self._log_github_client = None
 
     @property
     def github_client(self) -> Optional[Github]:
@@ -65,6 +66,24 @@ class GitHubPRAgent:
                 temperature=DEFAULT_TEMPERATURE,
             )
         return self._llm
+
+    @property
+    def logging_github_client(self) -> Optional[Github]:
+        """Return GitHub API client for logging with optional separate token.
+
+        Uses LOG_GITHUB_TOKEN if set; otherwise falls back to GITHUB_TOKEN.
+        """
+        if not REQUIRED_LIBS_AVAILABLE:
+            raise ImportError("Required libraries not found.")
+
+        if self._log_github_client is None:
+            token = os.environ.get("LOG_GITHUB_TOKEN") or os.environ.get("GITHUB_TOKEN")
+            if not token:
+                print("Warning: LOG_GITHUB_TOKEN/GITHUB_TOKEN not set for logging.")
+                return Github()  # Limited access
+            self._log_github_client = Github(token)
+
+        return self._log_github_client
 
     def append_to_log_file(
         self,
@@ -97,7 +116,7 @@ class GitHubPRAgent:
             branch_name = os.environ.get("LOG_BRANCH", "log_event")
             path = os.environ.get("LOG_FILE_PATH", "pr_success.log")
 
-            repo = self.github_client.get_repo(f"{owner}/{repo_name}")
+            repo = self.logging_github_client.get_repo(f"{owner}/{repo_name}")
 
             # Ensure branch exists; if not, create from default branch
             try:

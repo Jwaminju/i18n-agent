@@ -14,6 +14,9 @@ from translator.content import (
 from translator.retriever import report, get_github_issue_open_pr
 from pr_generator.agent import GitHubPRAgent
 
+import json
+from logger.github_logger import GitHubLogger
+
 
 def report_translation_target_files(
     translate_lang: str, top_k: int = 1
@@ -61,7 +64,7 @@ def translate_docs(lang: str, file_path: str, additional_instruction: str = "") 
         with open(translation_file_path, "r", encoding="utf-8") as f:
             existing_content = f.read()
         if existing_content.strip():
-            return "Existing translation loaded (no tokens used)", existing_content
+            return "Existing translation loaded (no tokens used). If you want to translate again, please restart the gradio app.", existing_content
 
     # step 1. Get content from file path
     content = get_content(file_path)
@@ -105,6 +108,7 @@ def translate_docs_interactive(
     callback_result, translated_content = translate_docs(translate_lang, current_file, additional_instruction)
     status += f"💰 Used token and cost: \n```\n{callback_result}\n```"
 
+    print(callback_result)
     print(status)
 
     return translated_content
@@ -206,8 +210,6 @@ def generate_github_pr(
 
         # Append full result JSON to dedicated GitHub logging repository (always)
         try:
-            import json
-            from logger.github_logger import GitHubLogger
             log_entry = json.dumps(result, ensure_ascii=False) + "\n"
             log_res = GitHubLogger().append_jsonl(log_entry)
             print(f"📝 Log append result: {log_res}")

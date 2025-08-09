@@ -203,25 +203,25 @@ def generate_github_pr(
                 toctree_status = f"\n📋 **Toctree Updated:** ✅ {toctree_result['message']}"
             else:
                 toctree_status = f"\n📋 **Toctree Update Failed:** ❌ {toctree_result['message']}"
-        
-        if result["status"] == "success":
-            # Append full result JSON to GitHub log file on 'log_event' branch
+
+        # Append full result JSON to GitHub log file on 'log_event' branch (always)
+        try:
             import json
             log_entry = json.dumps(result, ensure_ascii=False) + "\n"
-            try:
-                log_res = agent.append_to_log_file(
-                    owner=github_config["owner"],
-                    repo_name=github_config["repo_name"],
-                    branch_name="log_event",
-                    path="pr_success.log",
-                    log_entry=log_entry,
-                    # Ensure pure JSONL (no header)
-                    header_if_new="",
-                )
-                print(f"📝 Log append result: {log_res}")
-            except Exception as e:
-                print(f"❌ Failed to append PR log via GitHub API: {e}")
-            
+            log_res = agent.append_to_log_file(
+                owner=github_config["owner"],
+                repo_name=github_config["repo_name"],
+                branch_name="log_event",
+                path="pr_success.log",
+                log_entry=log_entry,
+                # Ensure pure JSONL (no header)
+                header_if_new="",
+            )
+            print(f"📝 Log append result: {log_res}")
+        except Exception as e:
+            print(f"❌ Failed to append PR log via GitHub API: {e}")
+
+        if result["status"] == "success":
             return f"""✅ **GitHub PR Creation Successful!**
 
 🔗 **PR URL:** {result.get('pr_url', 'NO_PR_URL')}
@@ -231,22 +231,6 @@ def generate_github_pr(
 {result["message"]}"""
 
         elif result["status"] == "partial_success":
-            # Append full result JSON to GitHub log file on 'log_event' branch
-            import json
-            log_entry = json.dumps(result, ensure_ascii=False) + "\n"
-            try:
-                log_res = agent.append_to_log_file(
-                    owner=github_config["owner"],
-                    repo_name=github_config["repo_name"],
-                    branch_name="log_event",
-                    path="pr_success.log",
-                    log_entry=log_entry,
-                    header_if_new="",
-                )
-                print(f"📝 Log append result: {log_res}")
-            except Exception as e:
-                print(f"❌ Failed to append PR log via GitHub API: {e}")
-                
             return f"""⚠️ **Partial Success**
 
 🌿 **Branch:** {result["branch"]}

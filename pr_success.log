@@ -1,2 +1,3 @@
 # PR Success Log
 # Format: [timestamp] file_path -> pr_url
+{"status": "partial_success", "branch": "ko-attention_interface", "file_path": "docs/source/ko/attention_interface.md", "message": "File was saved and commit was successful.\nPR creation failed: ERROR: Existing PR found: https://github.com/Jwaminju/transformers/pull/1", "error_details": "ERROR: Existing PR found: https://github.com/Jwaminju/transformers/pull/1"}

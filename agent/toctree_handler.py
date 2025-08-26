@@ -265,7 +265,6 @@ Korean title:"""
             # Process toctree update with LLM
             self.process_pr_commit(filepath)
             # Commit toctree as separate commit
-            print("self.updated_ko_toctree:", self.updated_ko_toctree)
             if self.updated_ko_toctree:
                 return self.commit_and_push_toctree(
                     pr_agent=pr_agent,

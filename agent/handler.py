@@ -150,12 +150,6 @@ def start_translation_process():
             ""
             f"{original_file_link}\n"
             "**🌐 Translated Content:**\n"
-            # f"\n```\n\n{_extract_content_for_display(translated)}\n```"
-            # "\n```\n\n"
-            # f"\n{translated}\n"
-            # f"```"
-            # f"{status}\n"
-            # "✅ Translation completed. The code block will be added when generating PR."
         )
         return response, translated
 

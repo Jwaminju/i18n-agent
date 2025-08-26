@@ -12,7 +12,6 @@ from translator.content import (
     preprocess_content,
 )
 from translator.retriever import report, get_github_issue_open_pr
-
 # GitHub PR Agent import
 try:
     from pr_generator.agent import GitHubPRAgent
@@ -22,7 +21,8 @@ except ImportError as e:
     print(f"⚠️ GitHub PR Agent is not available: {e}")
     GITHUB_PR_AVAILABLE = False
 
-# GitHub configuration - must be provided by user or environment variables
+import json
+from logger.github_logger import GitHubLogger
 
 
 def report_translation_target_files(
@@ -71,7 +71,7 @@ def translate_docs(lang: str, file_path: str, additional_instruction: str = "") 
         with open(translation_file_path, "r", encoding="utf-8") as f:
             existing_content = f.read()
         if existing_content.strip():
-            return "Existing translation loaded (no tokens used)", existing_content
+            return "Existing translation loaded (no tokens used). If you want to translate again, please restart the gradio app.", existing_content
 
     # step 1. Get content from file path
     content = get_content(file_path)
@@ -115,6 +115,7 @@ def translate_docs_interactive(
     callback_result, translated_content = translate_docs(translate_lang, current_file, additional_instruction)
     status += f"💰 Used token and cost: \n```\n{callback_result}\n```"
 
+    print(callback_result)
     print(status)
 
     return translated_content
@@ -190,10 +191,11 @@ def generate_github_pr(
             repo_name=github_config["repo_name"],
             base_branch=github_config.get("base_branch", "main"),
         )
+        # TEST CODE
         # result = {
-        #     'status': 'partial_success', 
-        #     'branch': 'ko-attention_interface', 
-        #     'file_path': 'docs/source/ko/attention_interface.md', 
+        #     'status': 'partial_success',
+        #     'branch': 'ko-attention_interface',
+        #     'file_path': 'docs/source/ko/attention_interface.md',
         #     'message': 'File was saved and commit was successful.\nPR creation failed: ERROR: Existing PR found: https://github.com/Jwaminju/transformers/pull/1', 'error_details': 'ERROR: Existing PR found: https://github.com/Jwaminju/transformers/pull/1'
         #     }
         # Process toctree update after successful translation PR
@@ -213,19 +215,19 @@ def generate_github_pr(
                 toctree_status = f"\n📋 **Toctree Updated:** ✅ {toctree_result['message']}"
             else:
                 toctree_status = f"\n📋 **Toctree Update Failed:** ❌ {toctree_result['message']}"
-        
+
+        # Append full result JSON to dedicated GitHub logging repository (always)
+        try:
+            log_data = result.copy()
+            if toctree_result:
+                log_data["toctree_result"] = toctree_result
+            log_entry = json.dumps(log_data, ensure_ascii=False) + "\n"
+            log_res = GitHubLogger().append_jsonl(log_entry)
+            print(f"📝 Log append result: {log_res}")
+        except Exception as e:
+            print(f"❌ Failed to append PR log via GitHub API: {e}")
+
         if result["status"] == "success":
-            # Log successful PR to file
-            import datetime
-            pr_url = result.get('pr_url', 'NO_PR_URL')
-            log_entry = f"[{datetime.datetime.now().isoformat()}] {result['file_path']} -> {pr_url} ({result['status']})\n"
-            try:
-                with open("pr_success.log", "a", encoding="utf-8") as f:
-                    f.write(log_entry)
-                print(f"✅ Logged PR result: {log_entry.strip()}")
-            except Exception as e:
-                print(f"❌ Failed to log PR result: {e}")
-            
             return f"""✅ **GitHub PR Creation Successful!**
 
 🔗 **PR URL:** {result.get('pr_url', 'NO_PR_URL')}
@@ -235,17 +237,6 @@ def generate_github_pr(
 {result["message"]}"""
 
         elif result["status"] == "partial_success":
-            # Log partial success to file
-            import datetime
-            pr_url = result.get('pr_url', 'NO_PR_URL')
-            log_entry = f"[{datetime.datetime.now().isoformat()}] {result['file_path']} -> {pr_url} ({result['status']})\n"
-            try:
-                with open("pr_success.log", "a", encoding="utf-8") as f:
-                    f.write(log_entry)
-                print(f"✅ Logged PR result: {log_entry.strip()}")
-            except Exception as e:
-                print(f"❌ Failed to log PR result: {e}")
-                
             return f"""⚠️ **Partial Success**
 
 🌿 **Branch:** {result["branch"]}

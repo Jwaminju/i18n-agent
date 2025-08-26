@@ -12,7 +12,14 @@ from translator.content import (
     preprocess_content,
 )
 from translator.retriever import report, get_github_issue_open_pr
-from pr_generator.agent import GitHubPRAgent
+# GitHub PR Agent import
+try:
+    from pr_generator.agent import GitHubPRAgent
+
+    GITHUB_PR_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️ GitHub PR Agent is not available: {e}")
+    GITHUB_PR_AVAILABLE = False
 
 import json
 from logger.github_logger import GitHubLogger
@@ -175,21 +182,22 @@ def generate_github_pr(
         print(f"   🏠 Repository: {github_config['owner']}/{github_config['repo_name']}")
 
         agent = GitHubPRAgent()
-        # result = agent.run_translation_pr_workflow(
-        #     reference_pr_url=github_config["reference_pr_url"],
-        #     target_language=target_language,
-        #     filepath=filepath,
-        #     translated_doc=translated_content,
-        #     owner=github_config["owner"],
-        #     repo_name=github_config["repo_name"],
-        #     base_branch=github_config.get("base_branch", "main"),
-        # )
-        result = {
-            'status': 'partial_success', 
-            'branch': 'ko-attention_interface', 
-            'file_path': 'docs/source/ko/attention_interface.md', 
-            'message': 'File was saved and commit was successful.\nPR creation failed: ERROR: Existing PR found: https://github.com/Jwaminju/transformers/pull/1', 'error_details': 'ERROR: Existing PR found: https://github.com/Jwaminju/transformers/pull/1'
-            }
+        result = agent.run_translation_pr_workflow(
+            reference_pr_url=github_config["reference_pr_url"],
+            target_language=target_language,
+            filepath=filepath,
+            translated_doc=translated_content,
+            owner=github_config["owner"],
+            repo_name=github_config["repo_name"],
+            base_branch=github_config.get("base_branch", "main"),
+        )
+        # TEST CODE
+        # result = {
+        #     'status': 'partial_success',
+        #     'branch': 'ko-attention_interface',
+        #     'file_path': 'docs/source/ko/attention_interface.md',
+        #     'message': 'File was saved and commit was successful.\nPR creation failed: ERROR: Existing PR found: https://github.com/Jwaminju/transformers/pull/1', 'error_details': 'ERROR: Existing PR found: https://github.com/Jwaminju/transformers/pull/1'
+        #     }
         # Process toctree update after successful translation PR
         toctree_result = None
         if en_title:
@@ -210,7 +218,10 @@ def generate_github_pr(
 
         # Append full result JSON to dedicated GitHub logging repository (always)
         try:
-            log_entry = json.dumps(result, ensure_ascii=False) + "\n"
+            log_data = result.copy()
+            if toctree_result:
+                log_data["toctree_result"] = toctree_result
+            log_entry = json.dumps(log_data, ensure_ascii=False) + "\n"
             log_res = GitHubLogger().append_jsonl(log_entry)
             print(f"📝 Log append result: {log_res}")
         except Exception as e:

@@ -19,21 +19,42 @@ from translator.project_config import get_available_projects, get_project_config
 # State management
 class ChatState:
     def __init__(self):
-        self.step = "welcome"  # welcome -> select_project -> find_files -> translate -> create_github_pr
-        self.selected_project = "transformers"  # Default project
+        self.step = "welcome"  # welcome -> find_files -> translate -> create_github_pr
+        
+        # Transient state (reset on restart)
+        self.selected_project = "transformers"
         self.target_language = "ko"
         self.k_files = 10
         self.files_to_translate = []
         self.additional_instruction = ""
         self.current_file_content = {"translated": ""}
-        self.pr_result = None  # Store PR creation result
-        # GitHub configuration
-        self.github_config = {
-            "token": "",
-            "owner": "",
-            "repo_name": "",
-            "reference_pr_url": "https://github.com/huggingface/transformers/pull/24968",
+        self.pr_result = None
+        
+        # Persistent settings (preserved across restarts)
+        self.persistent_settings = {
+            "anthropic_api_key": "",
+            "github_config": {
+                "token": "",
+                "owner": "",
+                "repo_name": "",
+                "reference_pr_url": "",
+            }
         }
+    
+    def reset_transient_state(self):
+        """Reset only the workflow state, keep persistent settings"""
+        self.step = "welcome"
+        self.selected_project = "transformers"
+        self.target_language = "ko"
+        self.k_files = 10
+        self.files_to_translate = []
+        self.additional_instruction = ""
+        self.current_file_content = {"translated": ""}
+        self.pr_result = None
+    
+    @property
+    def github_config(self):
+        return self.persistent_settings["github_config"]
 
 
 state = ChatState()
@@ -74,7 +95,22 @@ def process_file_search_handler(project: str, lang: str, k: int, history: list) 
     state.k_files = k
     state.step = "find_files"
 
-    status_report, files_list = report_translation_target_files(project, lang, k)
+    try:
+        status_report, files_list = report_translation_target_files(project, lang, k)
+    except Exception as e:
+        if "rate limit" in str(e).lower():
+            response = f"""❌ **GitHub API Rate Limit Exceeded**
+
+{str(e)}
+
+**💡 To fix this:**
+1. Set GitHub Token in Configuration panel above
+2. Click "💾 Save Configuration" 
+3. Try "Find Files" again"""
+            history.append(["File search request", response])
+            return history, "", update_status(), gr.Tabs(selected=0), gr.update(choices=[])
+        else:
+            raise  # Re-raise non-rate-limit errors
     state.files_to_translate = (
         [file[0] for file in files_list]
         if files_list
@@ -289,30 +325,40 @@ def sync_language_displays(lang):
     return lang
 
 
-def update_github_config(token, owner, repo, reference_pr_url):
-    """Update GitHub configuration settings."""
+def update_persistent_config(anthropic_key, github_token, github_owner, github_repo, reference_pr_url):
+    """Update persistent configuration settings."""
     global state
-
-    # Set GitHub token in environment variables
-    if token:
-        os.environ["GITHUB_TOKEN"] = token
+    
+    # Update API keys
+    if anthropic_key:
+        state.persistent_settings["anthropic_api_key"] = anthropic_key
+        os.environ["ANTHROPIC_API_KEY"] = anthropic_key
+    
+    if github_token:
+        os.environ["GITHUB_TOKEN"] = github_token
 
     # Get default reference PR URL from project config if not provided
-    if not reference_pr_url:
-        config = get_project_config(state.selected_project)
-        reference_pr_url = config.reference_pr_url
+    if not reference_pr_url and state.selected_project:
+        try:
+            config = get_project_config(state.selected_project)
+            reference_pr_url = config.reference_pr_url
+        except:
+            pass
 
-    # Save GitHub configuration to state
-    state.github_config.update(
-        {
-            "token": token,
-            "owner": owner,
-            "repo_name": repo,
-            "reference_pr_url": reference_pr_url,
-        }
-    )
+    # Save GitHub configuration to persistent settings
+    state.persistent_settings["github_config"].update({
+        "token": github_token or "",
+        "owner": github_owner or "",
+        "repo_name": github_repo or "",
+        "reference_pr_url": reference_pr_url or "",
+    })
 
-    return f"✅ GitHub configuration updated: {owner}/{repo}"
+    return f"✅ Configuration saved! GitHub: {github_owner}/{github_repo}"
+
+
+def update_github_config(token, owner, repo, reference_pr_url):
+    """Legacy function for backward compatibility."""
+    return update_persistent_config("", token, owner, repo, reference_pr_url)
 
 
 def update_prompt_preview(language, file_path, additional_instruction):
@@ -348,7 +394,14 @@ def send_message(message, history):
 
 
 # Button handlers with tab switching
-def start_translate_handler(history, anthropic_key, file_to_translate, additional_instruction=""):
+def start_translate_handler(history, file_to_translate, additional_instruction=""):
+    # Use persistent anthropic key
+    anthropic_key = state.persistent_settings["anthropic_api_key"]
+    if not anthropic_key:
+        response = "❌ Please set Anthropic API key in Configuration panel first."
+        history.append(["Translation request", response])
+        return history, "", update_status(), gr.Tabs(selected=0)
+    
     os.environ["ANTHROPIC_API_KEY"] = anthropic_key
     
     state.additional_instruction = additional_instruction
@@ -363,17 +416,24 @@ def approve_handler(history, owner, repo, reference_pr_url):
     global state
     state.step = "create_github_pr"
 
-    # Update github config from the latest UI values
-    state.github_config["owner"] = owner
-    state.github_config["repo_name"] = repo
-    state.github_config["reference_pr_url"] = reference_pr_url
-
-    # Validate GitHub configuration
-    github_config = state.github_config
-    if not all([github_config.get("token"), owner, repo]):
-        response = "❌ GitHub configuration incomplete. Please provide GitHub Token, Owner, and Repository Name in Tab 3."
+    # Use persistent settings for token, update other values
+    github_config = state.persistent_settings["github_config"]
+    if not github_config.get("token"):
+        response = "❌ Please set GitHub Token in Configuration panel first."
         history.append(["GitHub PR creation request", response])
         return history, "", update_status()
+        
+    if not owner or not repo:
+        response = "❌ Please set GitHub Owner and Repository Name in Configuration panel first."
+        history.append(["GitHub PR creation request", response])
+        return history, "", update_status()
+
+    # Update reference PR URL (can be set per PR)
+    if reference_pr_url:
+        state.persistent_settings["github_config"]["reference_pr_url"] = reference_pr_url
+
+    # Use persistent settings
+    github_config = state.persistent_settings["github_config"]
 
     # If reference PR is not provided, use the agent to find one
     if not github_config.get("reference_pr_url"):
@@ -440,9 +500,23 @@ def approve_handler(history, owner, repo, reference_pr_url):
 
 
 def restart_handler(history):
-    """Resets the state and UI."""
+    """Resets the workflow state but preserves persistent settings."""
     global state
+    # Backup persistent settings
+    backup_settings = state.persistent_settings.copy()
+    
+    # Reset state
     state = ChatState()
+    
+    # Restore persistent settings
+    state.persistent_settings = backup_settings
+    
+    # Restore environment variables
+    if backup_settings["anthropic_api_key"]:
+        os.environ["ANTHROPIC_API_KEY"] = backup_settings["anthropic_api_key"]
+    if backup_settings["github_config"]["token"]:
+        os.environ["GITHUB_TOKEN"] = backup_settings["github_config"]["token"]
+    
     welcome_msg = get_welcome_message()
     new_hist = [[None, welcome_msg]]
     return new_hist, "", update_status(), gr.Tabs(selected=0)

@@ -14,13 +14,17 @@ def get_github_repo_files(project: str = "transformers"):
     """
     config = get_project_config(project)
     
-    # Add GitHub token if available to avoid rate limiting
+    # Add GitHub token if available to avoid rate limiting (optional)
     headers = {}
     github_token = os.environ.get("GITHUB_TOKEN")
     if github_token:
         headers["Authorization"] = f"token {github_token}"
     
     response = requests.get(config.api_url, headers=headers)
+    
+    # Handle rate limit with helpful message
+    if response.status_code == 403 and "rate limit" in response.text.lower():
+        raise Exception(f"GitHub API rate limit exceeded. To avoid this, set GITHUB_TOKEN in your environment or provide a GitHub token in the UI. Details: {response.text}")
 
     data = response.json()
     all_items = data.get("tree", [])
@@ -48,7 +52,7 @@ def get_github_issue_open_pr(project: str = "transformers", lang: str = "ko"):
         "Accept": "application/vnd.github+json",
     }
     
-    # Add GitHub token if available to avoid rate limiting
+    # Add GitHub token if available to avoid rate limiting (optional)
     github_token = os.environ.get("GITHUB_TOKEN")
     if github_token:
         headers["Authorization"] = f"token {github_token}"
@@ -62,7 +66,9 @@ def get_github_issue_open_pr(project: str = "transformers", lang: str = "ko"):
         url = f"https://api.github.com/repos/{repo_path}/pulls?state=open&page={page}&per_page={per_page}"
         response = requests.get(url, headers=headers)
         
-        if response.status_code != 200:
+        if response.status_code == 403 and "rate limit" in response.text.lower():
+            raise Exception(f"GitHub API rate limit exceeded. To avoid this, set GITHUB_TOKEN in your environment or provide a GitHub token in the UI. Details: {response.text}")
+        elif response.status_code != 200:
             raise Exception(f"GitHub API error: {response.status_code} {response.text}")
         
         page_prs = response.json()

@@ -19,6 +19,7 @@ from agent.handler import (
     update_github_config,
 )
 from translator.model import Languages
+from translator.project_config import get_available_projects
 
 load_dotenv()
 
@@ -125,6 +126,11 @@ with gr.Blocks(
                 with gr.Tabs(elem_classes="simple-tabs") as control_tabs:
                     with gr.TabItem("1. Find Files", id=0):
                         with gr.Group():
+                            project_dropdown = gr.Radio(
+                                choices=get_available_projects(),
+                                label="🎯 Select Project",
+                                value="transformers",
+                            )
                             lang_dropdown = gr.Radio(
                                 choices=[language.value for language in Languages],
                                 label="🌍 Translate To",
@@ -226,7 +232,7 @@ with gr.Blocks(
 
     find_btn.click(
         fn=process_file_search_handler,
-        inputs=[lang_dropdown, k_input, chatbot],
+        inputs=[project_dropdown, lang_dropdown, k_input, chatbot],
         outputs=[chatbot, msg_input, status_display, control_tabs, files_to_translate],
     )
 

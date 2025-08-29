@@ -13,12 +13,14 @@ from agent.workflow import (
 )
 from pr_generator.searcher import find_reference_pr_simple_stream
 from translator.content import get_full_prompt, get_content, preprocess_content
+from translator.project_config import get_available_projects, get_project_config
 
 
 # State management
 class ChatState:
     def __init__(self):
-        self.step = "welcome"  # welcome -> find_files -> translate -> create_github_pr
+        self.step = "welcome"  # welcome -> select_project -> find_files -> translate -> create_github_pr
+        self.selected_project = "transformers"  # Default project
         self.target_language = "ko"
         self.k_files = 10
         self.files_to_translate = []
@@ -53,25 +55,26 @@ def _extract_content_for_display(content: str) -> str:
 
 
 def get_welcome_message():
-    """Initial welcome message with file finding controls"""
+    """Initial welcome message with project selection"""
     return """**👋 Welcome to 🌐 Hugging Face i18n Translation Agent!**
 
 I'll help you find files that need translation and translate them in a streamlined workflow.
 
-**🔎 Let's start by finding files that need translation.**
+**🎯 First, select which project you want to translate:**
 
-Use the **`Quick Controls`** on the right or **ask me `what`, `how`, or `help`** to get started.
+Use the **`Quick Controls`** on the right to select a project, or **ask me `what`, `how`, or `help`** to get started.
 """
 
 
-def process_file_search_handler(lang: str, k: int, history: list) -> tuple:
+def process_file_search_handler(project: str, lang: str, k: int, history: list) -> tuple:
     """Process file search request and update Gradio UI components."""
     global state
+    state.selected_project = project
     state.target_language = lang
     state.k_files = k
     state.step = "find_files"
 
-    status_report, files_list = report_translation_target_files(lang, k)
+    status_report, files_list = report_translation_target_files(project, lang, k)
     state.files_to_translate = (
         [file[0] for file in files_list]
         if files_list
@@ -87,8 +90,10 @@ def process_file_search_handler(lang: str, k: int, history: list) -> tuple:
 """
 
     if state.files_to_translate:
+        config = get_project_config(state.selected_project)
         for i, file in enumerate(state.files_to_translate, 1):
-            response += f"\n{i}. `{file}`"
+            file_link = f"{config.repo_url}/blob/main/{file}"
+            response += f"\n{i}. [`{file}`]({file_link})"
 
         # if len(state.files_to_translate) > 5:
         #     response += f"\n... and {len(state.files_to_translate) - 5} more files"
@@ -138,9 +143,8 @@ def start_translation_process():
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(translated, encoding="utf-8")
 
-        original_file_link = (
-            "https://github.com/huggingface/transformers/blob/main/" + current_file
-        )
+        config = get_project_config(state.selected_project)
+        original_file_link = f"{config.repo_url}/blob/main/{current_file}"
         print("Compeleted translation:\n")
         print(translated)
         print("----------------------------")
@@ -226,12 +230,12 @@ def handle_user_message(message, history):
 
 def update_status():
     if state.step == "welcome":
-        return """
+        return f"""
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;padding: 10px; background: rgba(0, 0, 0, 0.25); border-radius: 8px;">
             <div><strong>🔄 Step:</strong> Welcome</div>
+            <div><strong>🎯 Project:</strong> {state.selected_project}</div>
             <div><strong>📁 Files:</strong> 0</div>
-            <div><strong>🌍 Language:</strong> ko</div>
-            <div><strong>⏳ Progress:</strong> Ready</div>
+            <div><strong>🌍 Language:</strong> {state.target_language}</div>
         </div>
         """
 
@@ -267,6 +271,7 @@ def update_status():
     status_html = f"""
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 10px; background: rgba(0, 0, 0, 0.25); border-radius: 8px;">
         <div><strong>🔄 Step:</strong> {step_map.get(state.step, state.step)}</div>
+        <div><strong>🎯 Project:</strong> {state.selected_project}</div>
         <div><strong>📁 Files:</strong> {len(state.files_to_translate)}</div>
         <div><strong>🌍 Language:</strong> {state.target_language}</div>
         <div><strong>⏳ Progress:</strong> {progress_map.get(state.step, 'In progress')}</div>
@@ -292,14 +297,18 @@ def update_github_config(token, owner, repo, reference_pr_url):
     if token:
         os.environ["GITHUB_TOKEN"] = token
 
+    # Get default reference PR URL from project config if not provided
+    if not reference_pr_url:
+        config = get_project_config(state.selected_project)
+        reference_pr_url = config.reference_pr_url
+
     # Save GitHub configuration to state
     state.github_config.update(
         {
             "token": token,
             "owner": owner,
             "repo_name": repo,
-            "reference_pr_url": reference_pr_url
-            or state.github_config["reference_pr_url"],
+            "reference_pr_url": reference_pr_url,
         }
     )
 

@@ -26,19 +26,20 @@ from logger.github_logger import GitHubLogger
 
 
 def report_translation_target_files(
-    translate_lang: str, top_k: int = 1
+    project: str, translate_lang: str, top_k: int = 1
 ) -> tuple[str, list[list[str]]]:
     """Return the top-k files that need translation, excluding files already in progress.
 
     Args:
+        project: Project to translate (e.g., "transformers", "smolagents")
         translate_lang: Target language to translate
         top_k: Number of top-first files to return for translation. (Default 1)
     """
     # Get files in progress
-    docs_in_progress, pr_info_list = get_github_issue_open_pr(translate_lang)
+    docs_in_progress, pr_info_list = get_github_issue_open_pr(project, translate_lang)
 
     # Get all available files for translation
-    all_status_report, all_filepath_list = report(translate_lang, top_k * 2)  # Get more to account for filtering
+    all_status_report, all_filepath_list = report(project, translate_lang, top_k * 2)  # Get more to account for filtering
 
     # Filter out files that are already in progress
     available_files = [f for f in all_filepath_list if f not in docs_in_progress]
@@ -52,7 +53,7 @@ def report_translation_target_files(
     if docs_in_progress:
         status_report += f"\n\n🤖 Found {len(docs_in_progress)} files in progress for translation:"
         for i, file in enumerate(docs_in_progress):
-            status_report += f"\n{i+1}. `{file}`: {pr_info_list[i]}"
+            status_report += f"\n{i+1}. [`{file}`]({pr_info_list[i]})"
         status_report += f"\n\n📋 Showing {len(filepath_list)} available files (excluding in-progress):"
 
     return status_report, [[file] for file in filepath_list]

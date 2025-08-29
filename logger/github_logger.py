@@ -12,7 +12,7 @@ class GitHubLogger:
     """Dedicated logger that appends JSONL entries to a GitHub repo/branch/file.
 
     Env vars:
-      - LOG_GITHUB_TOKEN (fallback: GITHUB_TOKEN)
+      - GITHUB_TOKEN
       - LOG_REPO (format: owner/repo)
       - LOG_BRANCH (default: 'log_event')
       - LOG_FILE_PATH (default: 'pr_success.log')
@@ -21,9 +21,9 @@ class GitHubLogger:
     def __init__(self):
         if not LIBS_OK:
             raise ImportError("PyGithub not installed. Please install PyGithub.")
-        token = os.environ.get("LOG_GITHUB_TOKEN") or os.environ.get("GITHUB_TOKEN")
+        token = os.environ.get("GITHUB_TOKEN")
         if not token:
-            raise ValueError("Missing LOG_GITHUB_TOKEN or GITHUB_TOKEN for logging")
+            raise ValueError("Missing GITHUB_TOKEN for logging")
         self._client = Github(token)
 
         repo_spec = os.environ.get("LOG_REPO")

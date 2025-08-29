@@ -17,6 +17,7 @@ from agent.handler import (
     update_prompt_preview,
     update_status,
     update_github_config,
+    update_persistent_config,
 )
 from translator.model import Languages
 from translator.project_config import get_available_projects
@@ -112,12 +113,54 @@ with gr.Blocks(
             gr.Markdown("### 🌐 Hugging Face i18n Agent")
 
             chatbot = gr.Chatbot(
-                value=[[None, get_welcome_message()]], scale=1, height=585,
+                value=[[None, get_welcome_message()]], scale=1, height=525,
                 show_copy_button=True
             )
+            
+            # Chat input directly under main chat
+            gr.Markdown("### 💬 Chat with agent")
+            with gr.Row():
+                msg_input = gr.Textbox(
+                    placeholder="Type your message here... (e.g. 'what', 'how', or 'help')",
+                    container=False,
+                    scale=4,
+                )
+                send_btn = gr.Button("Send", scale=1, elem_classes="action-button")
 
         # Controller interface
         with gr.Column(scale=2):
+            # Configuration Panel
+            with gr.Column(elem_classes=["control-panel"]):
+                gr.Markdown("### ⚙️ Configuration")
+                
+                with gr.Accordion("🔧 API & GitHub Settings", open=True):
+                    config_anthropic_key = gr.Textbox(
+                        label="🔑 Anthropic API Key",
+                        type="password",
+                        placeholder="sk-ant-...",
+                    )
+                    config_github_token = gr.Textbox(
+                        label="🔑 GitHub Token (Required for PR, Optional for file search)",
+                        type="password", 
+                        placeholder="ghp_...",
+                    )
+                    
+                    with gr.Row():
+                        config_github_owner = gr.Textbox(
+                            label="👤 GitHub Owner",
+                            placeholder="your-username",
+                            scale=1,
+                        )
+                        config_github_repo = gr.Textbox(
+                            label="📁 Repository Name", 
+                            placeholder="your-repository",
+                            scale=1,
+                        )
+                    
+                    save_config_btn = gr.Button(
+                        "💾 Save Configuration", elem_classes="action-button"
+                    )
+                    
             # Quick Controller
             with gr.Column(elem_classes=["control-panel"]):
                 gr.Markdown("### 🛠️ Quick Controls")
@@ -165,10 +208,6 @@ with gr.Blocks(
                                 value="ko",
                                 interactive=False,
                             )
-                            anthropic_key = gr.Textbox(
-                                label="🔑 Anthropic API key for translation generation",
-                                type="password",
-                            )
                             additional_instruction = gr.Textbox(
                                 label="📝 Additional instructions (Optional - e.g., custom glossary)",
                                 placeholder="Example: Translate 'model' as '모델' consistently",
@@ -190,26 +229,9 @@ with gr.Blocks(
 
                     with gr.TabItem("3. Upload PR", id=2):
                         with gr.Group():
-                            github_token = gr.Textbox(
-                                label="🔑 GitHub Token",
-                                type="password",
-                                placeholder="ghp_xxxxxxxxxxxxxxxxxxxx",
-                            )
-                            github_owner = gr.Textbox(
-                                label="👤 GitHub Owner/Username",
-                                placeholder="your-username",
-                            )
-                            github_repo = gr.Textbox(
-                                label="📁 Repository Name",
-                                placeholder="your-repository",
-                            )
                             reference_pr_url = gr.Textbox(
-                                label="🔗 Reference PR URL (Optional - Agent will find one if not provided)",
-                                placeholder="reference PR URL",
-                            )
-
-                            save_config_btn = gr.Button(
-                                "💾 Save GitHub Config", elem_classes="action-button"
+                                label="🔗 Reference PR URL (Optional)",
+                                placeholder="Auto-filled based on project selection",
                             )
                             approve_btn = gr.Button(
                                 "✅ Generate GitHub PR", elem_classes="action-button"
@@ -217,16 +239,6 @@ with gr.Blocks(
                             restart_btn = gr.Button(
                                 "🔄 Restart Translation", elem_classes="action-button"
                             )
-
-            # Chat Controller
-            with gr.Column(elem_classes=["control-panel"]):
-                gr.Markdown("### 💬 Chat with agent (Only simple chat is available)")
-                msg_input = gr.Textbox(
-                    placeholder="Type your message here... (e.g. 'what', 'how', or 'help')",
-                    container=False,
-                    scale=4,
-                )
-                send_btn = gr.Button("Send", scale=1, elem_classes="action-button")
 
     # Event Handlers
 
@@ -253,20 +265,20 @@ with gr.Blocks(
     # Button event handlers
     start_translate_btn.click(
         fn=start_translate_handler,
-        inputs=[chatbot, anthropic_key, file_to_translate_input, additional_instruction],
+        inputs=[chatbot, file_to_translate_input, additional_instruction],
         outputs=[chatbot, msg_input, status_display, control_tabs],
     )
 
-    # GitHub Config Save
+    # Configuration Save
     save_config_btn.click(
-        fn=update_github_config,
-        inputs=[github_token, github_owner, github_repo, reference_pr_url],
+        fn=update_persistent_config,
+        inputs=[config_anthropic_key, config_github_token, config_github_owner, config_github_repo, reference_pr_url],
         outputs=[msg_input],
     )
 
     approve_btn.click(
         fn=approve_handler,
-        inputs=[chatbot, github_owner, github_repo, reference_pr_url],
+        inputs=[chatbot, config_github_owner, config_github_repo, reference_pr_url],
         outputs=[chatbot, msg_input, status_display],
     )
 

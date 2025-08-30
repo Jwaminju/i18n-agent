@@ -11,7 +11,7 @@ from translator.content import (
     llm_translate,
     preprocess_content,
 )
-from translator.retriever import report, get_github_issue_open_pr
+from translator.retriever import report, get_github_issue_open_pr, get_github_repo_files
 # GitHub PR Agent import
 try:
     from pr_generator.agent import GitHubPRAgent
@@ -35,11 +35,14 @@ def report_translation_target_files(
         translate_lang: Target language to translate
         top_k: Number of top-first files to return for translation. (Default 1)
     """
-    # Get files in progress
-    docs_in_progress, pr_info_list = get_github_issue_open_pr(project, translate_lang)
-
-    # Get all available files for translation
-    all_status_report, all_filepath_list = report(project, translate_lang, top_k * 2)  # Get more to account for filtering
+    # Get repo files once to avoid duplicate API calls
+    all_repo_files = get_github_repo_files(project)
+    
+    # Get all available files for translation using the file list
+    all_status_report, all_filepath_list = report(project, translate_lang, top_k * 2, all_repo_files)  # Get more to account for filtering
+    
+    # Get files in progress using the same file list
+    docs_in_progress, pr_info_list = get_github_issue_open_pr(project, translate_lang, all_repo_files)
 
     # Filter out files that are already in progress
     available_files = [f for f in all_filepath_list if f not in docs_in_progress]

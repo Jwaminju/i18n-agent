@@ -37,7 +37,7 @@ def get_github_repo_files(project: str = "transformers"):
     return file_paths
 
 
-def get_github_issue_open_pr(project: str = "transformers", lang: str = "ko"):
+def get_github_issue_open_pr(project: str = "transformers", lang: str = "ko", all_files: list = None):
     """
     Get open PR in the github issue, filtered by title containing '[i18n-KO]'.
     """
@@ -48,6 +48,10 @@ def get_github_issue_open_pr(project: str = "transformers", lang: str = "ko"):
     if not issue_id:
         raise ValueError(f"⚠️ No GitHub issue registered for {project}.")
 
+    # Require all_files parameter 
+    if all_files is None:
+        raise ValueError("Repository file list must be provided")
+    
     headers = {
         "Accept": "application/vnd.github+json",
     }
@@ -84,20 +88,59 @@ def get_github_issue_open_pr(project: str = "transformers", lang: str = "ko"):
 
     filtered_prs = [pr for pr in all_open_prs if "[i18n-KO]" in pr["title"]]
 
-    # Pattern to match both `filename.md` and filename.md formats
-    pattern = re.compile(r"(?:`([^`]+\.md)`|(\w+\.md))")
+    # Pattern to match filenames after "Translated" keyword
+    pattern = re.compile(r"Translated\s+(?:`([^`]+)`|(\S+))\s+to")
 
+    def find_original_file_path(filename_from_title, all_files):
+        """Find the exact file path from repo files by matching filename"""
+        if not filename_from_title:
+            return None
+            
+        # Remove .md extension for matching
+        base_name = filename_from_title.replace('.md', '')
+        
+        # Look for exact matches in repo files
+        for file_path in all_files:
+            if file_path.startswith("docs/source/en/") and file_path.endswith(".md"):
+                file_base = file_path.split("/")[-1].replace('.md', '')
+                if file_base == base_name:
+                    return file_path
+                    
+        # If no exact match, fallback to simple path
+        return f"docs/source/en/{filename_from_title}"
+    
     filenames = []
+    pr_info_list = []
+    
     for pr in filtered_prs:
         match = pattern.search(pr["title"])
         if match:
             # Use group 1 (with backticks) or group 2 (without backticks)
             filename = match.group(1) or match.group(2)
-            filenames.append("docs/source/en/" + filename)
-    pr_info_list = [
-        f"{config.repo_url}/pull/{pr['url'].rstrip('/').split('/')[-1]}"
-        for pr in filtered_prs
-    ]
+            # Add .md extension if not present
+            if not filename.endswith('.md'):
+                filename += '.md'
+                
+            # Find the correct file path by matching filename
+            correct_path = None
+            if filename:
+                # Remove .md extension for matching
+                base_name = filename.replace('.md', '')
+                
+                # Look for exact matches in repo files
+                for file_path in all_files:
+                    if file_path.startswith("docs/source/en/") and file_path.endswith(".md"):
+                        file_base = file_path.split("/")[-1].replace('.md', '')
+                        if file_base == base_name:
+                            correct_path = file_path
+                            break
+                            
+                # If no exact match, fallback to simple path
+                if not correct_path:
+                    correct_path = f"docs/source/en/{filename}"
+            if correct_path:
+                filenames.append(correct_path)
+                pr_info_list.append(f"{config.repo_url}/pull/{pr['url'].rstrip('/').split('/')[-1]}")
     return filenames, pr_info_list
 
 
@@ -121,11 +164,12 @@ def retrieve(summary: Summary, table_size: int = 10) -> tuple[str, list[str]]:
     return report, first_missing_docs
 
 
-def report(project: str, target_lang: str, top_k: int = 1) -> tuple[str, list[str]]:
+def report(project: str, target_lang: str, top_k: int = 1, docs_file: list = None) -> tuple[str, list[str]]:
     """
     Generate a report for the translated docs
     """
-    docs_file = get_github_repo_files(project)
+    if docs_file is None:
+        raise ValueError("Repository file list must be provided")
 
     base_docs_path = Path("docs/source")
     en_docs_path = Path("docs/source/en")

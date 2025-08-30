@@ -62,23 +62,24 @@ def report_translation_target_files(
     return status_report, [[file] for file in filepath_list]
 
 
-def translate_docs(lang: str, file_path: str, additional_instruction: str = "") -> tuple[str, str]:
+def translate_docs(lang: str, file_path: str, additional_instruction: str = "", project: str = "transformers", force_retranslate: bool = False) -> tuple[str, str]:
     """Translate documentation."""
-    # Check if translation already exists
+    # Check if translation already exists (unless force retranslate is enabled)
     translation_file_path = (
         Path(__file__).resolve().parent.parent
         / f"translation_result/{file_path}"
     )
 
-    if translation_file_path.exists():
+    if not force_retranslate and translation_file_path.exists():
         print(f"📄 Found existing translation: {translation_file_path}")
         with open(translation_file_path, "r", encoding="utf-8") as f:
             existing_content = f.read()
         if existing_content.strip():
-            return "Existing translation loaded (no tokens used). If you want to translate again, please restart the gradio app.", existing_content
+            existing_msg = f"♻️ **Existing translation loaded** (no tokens used)\n📁 **File:** `{file_path}`\n📅 **Loaded from:** `{translation_file_path}`\n💡 **To retranslate:** Check 'Force Retranslate' option."
+            return existing_msg, existing_content
 
     # step 1. Get content from file path
-    content = get_content(file_path)
+    content = get_content(file_path, project)
     to_translate = preprocess_content(content)
 
     # step 2. Prepare prompt with docs content
@@ -101,7 +102,7 @@ def translate_docs(lang: str, file_path: str, additional_instruction: str = "") 
 
 
 def translate_docs_interactive(
-    translate_lang: str, selected_files: list[list[str]], additional_instruction: str = ""
+    translate_lang: str, selected_files: list[list[str]], additional_instruction: str = "", project: str = "transformers", force_retranslate: bool = False
 ) -> tuple[str, str]:
     """Interactive translation function that processes files one by one.
 
@@ -115,14 +116,22 @@ def translate_docs_interactive(
     # Start with the first file
     current_file = file_paths[0]
 
-    status = f"✅ Translation completed: `{current_file}` → `{translate_lang}`\n\n"
-    callback_result, translated_content = translate_docs(translate_lang, current_file, additional_instruction)
-    status += f"💰 Used token and cost: \n```\n{callback_result}\n```"
+    callback_result, translated_content = translate_docs(translate_lang, current_file, additional_instruction, project, force_retranslate)
+    
+    # Check if existing translation was loaded
+    if isinstance(callback_result, str) and "Existing translation loaded" in callback_result:
+        status = callback_result  # Use the existing translation message
+    else:
+        if force_retranslate:
+            status = f"🔄 **Force Retranslation completed**: `{current_file}` → `{translate_lang}`\n\n"
+        else:
+            status = f"✅ Translation completed: `{current_file}` → `{translate_lang}`\n\n"
+        status += f"💰 Used token and cost: \n```\n{callback_result}\n```"
 
     print(callback_result)
     print(status)
 
-    return translated_content
+    return status, translated_content
 
 
 def generate_github_pr(
@@ -131,6 +140,7 @@ def generate_github_pr(
     translated_content: str = None,
     github_config: dict = None,
     en_title: str = None,
+    project: str = "transformers",
 ) -> str:
     """Generate a GitHub PR for translated documentation.
 
@@ -148,7 +158,7 @@ def generate_github_pr(
         return "❌ GitHub PR Agent is not available. Please install required libraries."
 
     if not github_config:
-        return "❌ GitHub configuration not provided."
+        return "❌ GitHub configuration not provided. Please set up GitHub token, owner, and repository in Configuration panel."
 
     # Validate required configuration
     required_fields = ["token", "owner", "repo_name", "reference_pr_url"]
@@ -157,7 +167,7 @@ def generate_github_pr(
     ]
 
     if missing_fields:
-        return f"❌ Missing required configuration: {', '.join(missing_fields)}. Please provide these values."
+        return f"❌ Missing required GitHub configuration: {', '.join(missing_fields)}\n\n💡 Go to Configuration panel and set:\n" + "\n".join([f"  • {field}" for field in missing_fields])
 
     # Set token in environment for the agent.
     os.environ["GITHUB_TOKEN"] = github_config["token"]
@@ -170,29 +180,39 @@ def generate_github_pr(
                 / f"translation_result/{filepath}"
             )
             if not translation_file_path.exists():
-                return f"❌ Translation file not found: {translation_file_path}"
+                return f"❌ Translation file not found: {translation_file_path}\n\n💡 Please complete translation first in Tab 2 for file: {filepath}"
 
             with open(translation_file_path, "r", encoding="utf-8") as f:
                 translated_content = f.read()
 
         if not translated_content or not translated_content.strip():
-            return "❌ Translated content is empty."
+            return f"❌ Translated content is empty for file: {filepath}\n\n💡 Please complete translation first in Tab 2."
 
         # Execute GitHub PR Agent
+        # Get base repository from project config
+        from translator.project_config import get_project_config
+        project_config = get_project_config(project)
+        base_repo_path = project_config.repo_url.replace("https://github.com/", "")
+        base_owner, base_repo = base_repo_path.split("/")
+
         print(f"🚀 Starting GitHub PR creation...")
         print(f"   📁 File: {filepath}")
         print(f"   🌍 Language: {target_language}")
         print(f"   📊 Reference PR: {github_config['reference_pr_url']}")
-        print(f"   🏠 Repository: {github_config['owner']}/{github_config['repo_name']}")
+        print(f"   🏠 User Fork: {github_config['owner']}/{github_config['repo_name']}")
+        print(f"   🎯 Base Repository: {base_owner}/{base_repo}")
 
-        agent = GitHubPRAgent()
+        agent = GitHubPRAgent(
+            user_owner=github_config["owner"],
+            user_repo=github_config["repo_name"],
+            base_owner=base_owner,
+            base_repo=base_repo,
+        )
         result = agent.run_translation_pr_workflow(
             reference_pr_url=github_config["reference_pr_url"],
             target_language=target_language,
             filepath=filepath,
             translated_doc=translated_content,
-            owner=github_config["owner"],
-            repo_name=github_config["repo_name"],
             base_branch=github_config.get("base_branch", "main"),
         )
         # TEST CODE
@@ -206,9 +226,9 @@ def generate_github_pr(
         toctree_result = None
         if en_title:
             from agent.toctree_handler import TocTreeHandler
-            toctree_handler = TocTreeHandler()
+            toctree_handler = TocTreeHandler(project)
             toctree_result = toctree_handler.update_toctree_after_translation(
-                result, filepath, agent, github_config
+                result, filepath, agent, github_config, project
             )
 
         # Process result
@@ -252,13 +272,29 @@ def generate_github_pr(
 {result.get("error_details", "Unknown error")}"""
 
         else:
+            error_details = result.get("error_details", "No additional details")
             return f"""❌ **GitHub PR Creation Failed**
 
 **Error Message:**
-{result["message"]}"""
+{result["message"]}
+
+**Error Details:**
+{error_details}
+
+💡 **Common Solutions:**
+1. **Project Mismatch**: Selected project '{project}' but fork is '{github_config.get('repo_name', 'REPO')}' - ensure they match
+2. Check if your GitHub fork exists: {github_config.get('owner', 'USER')}/{github_config.get('repo_name', 'REPO')}
+3. Verify GitHub token has write access to your fork"""
 
     except Exception as e:
-        error_msg = f"❌ Unexpected error occurred during PR creation: {str(e)}"
+        error_msg = f"""❌ **Unexpected Error During PR Creation**
+
+**Error:** {str(e)}
+
+**Configuration:**
+• Project: {project}
+• File: {filepath}
+• Target: {github_config.get('owner', 'USER')}/{github_config.get('repo_name', 'REPO')} → {base_owner if 'base_owner' in locals() else 'BASE'}/{base_repo if 'base_repo' in locals() else 'REPO'}"""
         print(error_msg)
         return error_msg
 

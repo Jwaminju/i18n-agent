@@ -6,15 +6,18 @@ from langchain.callbacks import get_openai_callback
 from langchain_anthropic import ChatAnthropic
 
 from translator.prompt_glossary import PROMPT_WITH_GLOSSARY
+from translator.project_config import get_project_config
 
 
-def get_content(filepath: str) -> str:
+def get_content(filepath: str, project: str = "transformers") -> str:
     if filepath == "":
         raise ValueError("No files selected for translation.")
 
-    url = string.Template(
-        "https://raw.githubusercontent.com/huggingface/" "transformers/main/$filepath"
-    ).safe_substitute(filepath=filepath)
+    config = get_project_config(project)
+    # Extract repo path from repo_url (e.g., "huggingface/transformers")
+    repo_path = config.repo_url.replace("https://github.com/", "")
+    
+    url = f"https://raw.githubusercontent.com/{repo_path}/main/{filepath}"
     response = requests.get(url)
     if response.status_code == 200:
         content = response.text
@@ -170,4 +173,4 @@ def llm_translate(to_translate: str) -> tuple[str, str]:
         )
         ai_message = model.invoke(to_translate)
         print("cb:", cb)
-    return cb, ai_message.content
+    return str(cb), ai_message.content

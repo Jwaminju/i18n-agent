@@ -8,12 +8,16 @@ from dotenv import load_dotenv
 
 from agent.handler import (
     approve_handler,
+    confirm_and_go_translate_handler,
+    confirm_translation_and_go_upload_handler,
     get_welcome_message,
     process_file_search_handler,
     restart_handler,
     send_message,
     start_translate_handler,
     sync_language_displays,
+    update_language_selection,
+    update_project_selection,
     update_prompt_preview,
     update_status,
     update_github_config,
@@ -188,6 +192,11 @@ with gr.Blocks(
                                 "🔍 Find Files to Translate",
                                 elem_classes="action-button",
                             )
+                            
+                            confirm_go_btn = gr.Button(
+                                "✅ Confirm Selection & Go to Translate",
+                                elem_classes="action-button",
+                            )
 
                     with gr.TabItem("2. Translate", id=1):
                         with gr.Group():
@@ -214,9 +223,13 @@ with gr.Blocks(
                                 lines=2,
                             )
                             
-                            with gr.Accordion("🔍 Preview Prompt", open=False):
+                            force_retranslate = gr.Checkbox(
+                                label="🔄 Force Retranslate (ignore existing translations)",
+                                value=False,
+                            )
+                            
+                            with gr.Accordion("🔍 Preview Translation Prompt", open=False):
                                 prompt_preview = gr.Textbox(
-                                    label="Current Translation Prompt",
                                     lines=8,
                                     interactive=False,
                                     placeholder="Select a file and language to see the prompt preview...",
@@ -225,6 +238,12 @@ with gr.Blocks(
                             
                             start_translate_btn = gr.Button(
                                 "🚀 Start Translation", elem_classes="action-button"
+                            )
+                            
+                            confirm_upload_btn = gr.Button(
+                                "✅ Confirm Translation & Upload PR",
+                                elem_classes="action-button",
+                                visible=False,
                             )
 
                     with gr.TabItem("3. Upload PR", id=2):
@@ -247,12 +266,31 @@ with gr.Blocks(
         inputs=[project_dropdown, lang_dropdown, k_input, chatbot],
         outputs=[chatbot, msg_input, status_display, control_tabs, files_to_translate],
     )
+    
+    confirm_go_btn.click(
+        fn=confirm_and_go_translate_handler,
+        inputs=[chatbot],
+        outputs=[chatbot, msg_input, status_display, control_tabs],
+    )
 
-    # Sync language across tabs
+    # Auto-save selections to state and update prompt preview
+    project_dropdown.change(
+        fn=update_project_selection,
+        inputs=[project_dropdown, chatbot],
+        outputs=[chatbot, msg_input, status_display],
+    )
+    
+    # Update prompt preview when project changes
+    project_dropdown.change(
+        fn=update_prompt_preview,
+        inputs=[translate_lang_display, file_to_translate_input, additional_instruction],
+        outputs=[prompt_preview],
+    )
+    
     lang_dropdown.change(
-        fn=sync_language_displays,
-        inputs=[lang_dropdown],
-        outputs=[translate_lang_display],
+        fn=update_language_selection,
+        inputs=[lang_dropdown, chatbot],
+        outputs=[chatbot, msg_input, status_display, translate_lang_display],
     )
 
     #
@@ -265,15 +303,21 @@ with gr.Blocks(
     # Button event handlers
     start_translate_btn.click(
         fn=start_translate_handler,
-        inputs=[chatbot, file_to_translate_input, additional_instruction],
+        inputs=[chatbot, file_to_translate_input, additional_instruction, force_retranslate],
+        outputs=[chatbot, msg_input, status_display, control_tabs, start_translate_btn, confirm_upload_btn],
+    )
+    
+    confirm_upload_btn.click(
+        fn=confirm_translation_and_go_upload_handler,
+        inputs=[chatbot],
         outputs=[chatbot, msg_input, status_display, control_tabs],
     )
 
     # Configuration Save
     save_config_btn.click(
         fn=update_persistent_config,
-        inputs=[config_anthropic_key, config_github_token, config_github_owner, config_github_repo, reference_pr_url],
-        outputs=[msg_input],
+        inputs=[config_anthropic_key, config_github_token, config_github_owner, config_github_repo, reference_pr_url, chatbot],
+        outputs=[chatbot, msg_input, status_display],
     )
 
     approve_btn.click(

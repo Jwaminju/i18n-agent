@@ -4,9 +4,17 @@ from typing import Dict, List, Any
 import os
 
 class TocTreeHandler:
-    def __init__(self):
-        self.en_toctree_url = "https://raw.githubusercontent.com/huggingface/transformers/main/docs/source/en/_toctree.yml"
-        self.ko_toctree_url = "https://raw.githubusercontent.com/huggingface/transformers/main/docs/source/ko/_toctree.yml"
+    def __init__(self, project: str = "transformers"):
+        from translator.project_config import get_project_config
+        self.project = project
+        self.project_config = get_project_config(project)
+        
+        # Extract repository path from config
+        repo_path = self.project_config.repo_url.replace("https://github.com/", "")
+        
+        # Build project-specific URLs
+        self.en_toctree_url = f"https://raw.githubusercontent.com/{repo_path}/main/docs/source/en/_toctree.yml"
+        self.ko_toctree_url = f"https://raw.githubusercontent.com/{repo_path}/main/docs/source/ko/_toctree.yml"
         self.local_docs_path = "docs/source/ko"
     
     def fetch_toctree(self, url: str) -> Dict[str, Any]:
@@ -245,7 +253,8 @@ Korean title:"""
         translation_result: dict, 
         filepath: str, 
         pr_agent, 
-        github_config: dict
+        github_config: dict,
+        project: str = "transformers"
     ) -> dict:
         """Update toctree after successful translation PR.
         

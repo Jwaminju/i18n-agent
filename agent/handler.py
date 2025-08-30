@@ -108,7 +108,7 @@ def process_file_search_handler(project: str, lang: str, k: int, history: list) 
 2. Click "💾 Save Configuration" 
 3. Try "Find Files" again"""
             history.append(["File search request", response])
-            return history, "", update_status(), gr.Tabs(selected=0), gr.update(choices=[])
+            return history, "", update_status(), gr.Tabs(selected=0), gr.update(choices=[]), gr.update(visible=False)
         else:
             raise  # Re-raise non-rate-limit errors
     state.files_to_translate = (
@@ -141,14 +141,13 @@ def process_file_search_handler(project: str, lang: str, k: int, history: list) 
     # Add to history
     history.append(["Please find files that need translation", response])
     cleared_input = ""
-    selected_tab = 1 if state.files_to_translate else 0
 
     # 드롭다운 choices로 쓸 파일 리스트 반환 추가
     return (
         history,
         cleared_input,
         update_status(),
-        gr.Tabs(selected=selected_tab),
+        gr.Tabs(),  # Don't change tab
         update_dropdown_choices(state.files_to_translate),
     )
 
@@ -157,7 +156,30 @@ def update_dropdown_choices(file_list):
     return gr.update(choices=file_list, value=None)
 
 
-def start_translation_process():
+def confirm_and_go_translate_handler(history):
+    """Confirm selection and go to translate tab"""
+    global state
+    
+    response = f"✅ **Selection confirmed!**\n\n🎯 **Project:** {state.selected_project}\n🌍 **Language:** {state.target_language}\n\n**➡️ Go to Tab 2 to start translation.**"
+    history.append(["Confirm selection", response])
+    return history, "", update_status(), gr.Tabs(selected=1)
+
+
+def confirm_translation_and_go_upload_handler(history):
+    """Confirm translation and go to upload PR tab"""
+    global state
+    
+    if not state.current_file_content.get("translated"):
+        response = "❌ No translation available. Please complete translation first."
+        history.append(["Upload PR request", response])
+        return history, "", update_status(), gr.Tabs()
+    
+    response = f"✅ **Translation confirmed!**\n\n📄 **File:** `{state.files_to_translate[0] if state.files_to_translate else 'Unknown'}`\n\n**➡️ Go to Tab 3 to upload PR.**"
+    history.append(["Upload PR request", response])
+    return history, "", update_status(), gr.Tabs(selected=2)
+
+
+def start_translation_process(force_retranslate=False):
     """Start the translation process for the first file"""
     if not state.files_to_translate:
         return "❌ No files available for translation.", ""
@@ -166,8 +188,8 @@ def start_translation_process():
 
     # Call translation function (simplified for demo)
     try:
-        translated = translate_docs_interactive(
-            state.target_language, [[current_file]], state.additional_instruction
+        status, translated = translate_docs_interactive(
+            state.target_language, [[current_file]], state.additional_instruction, state.selected_project, force_retranslate
         )
 
         state.current_file_content = {"translated": translated}
@@ -184,13 +206,17 @@ def start_translation_process():
         print("Compeleted translation:\n")
         print(translated)
         print("----------------------------")
-        response = (
-            f"""🔄 Translation for: `{current_file}`\n"""
-            "**📄 Original Content Link:**\n"
-            ""
-            f"{original_file_link}\n"
-            "**🌐 Translated Content:**\n"
-        )
+        
+        # Different response format for existing vs new translation
+        if isinstance(status, str) and "Existing translation loaded" in status:
+            response = f"{status}\n**📄 Original Content Link:** {original_file_link}\n\n**🌐 Translated Content:**"
+        else:
+            response = (
+                f"""🔄 Translation for: `{current_file}`\n"""
+                f"**📄 Original Content Link:** {original_file_link}\n\n"
+                f"{status}\n\n"
+                "**🌐 Translated Content:**"
+            )
         return response, translated
 
 
@@ -228,7 +254,12 @@ Currently available actions with quick controls:
     else:
         return """I understand you want to work on translations! 
 
-To get started, please use the controls above to configure your translation settings and find files that need translation.
+**Two ways to get started:**
+
+1. **🔍 Find Files first** - Use Tab 1 to discover files that need translation
+2. **🚀 Direct Translation** - Go to Tab 2 and enter a file path directly (e.g., `docs/source/en/model_doc/bert.md`)
+
+Make sure to configure your API keys in the Configuration panel above.
 """
 
 
@@ -325,7 +356,25 @@ def sync_language_displays(lang):
     return lang
 
 
-def update_persistent_config(anthropic_key, github_token, github_owner, github_repo, reference_pr_url):
+def update_project_selection(project, history):
+    """Update state when project is selected"""
+    global state
+    state.selected_project = project
+    response = f"Selection confirmed: 🎯 Project → **{project}**"
+    history.append(["Project selection", response])
+    return history, "", update_status()
+
+
+def update_language_selection(lang, history):
+    """Update state when language is selected"""
+    global state
+    state.target_language = lang
+    response = f"Selection confirmed: 🌍 Language → **{lang}**"
+    history.append(["Language selection", response])
+    return history, "", update_status(), lang
+
+
+def update_persistent_config(anthropic_key, github_token, github_owner, github_repo, reference_pr_url, history):
     """Update persistent configuration settings."""
     global state
     
@@ -353,7 +402,15 @@ def update_persistent_config(anthropic_key, github_token, github_owner, github_r
         "reference_pr_url": reference_pr_url or "",
     })
 
-    return f"✅ Configuration saved! GitHub: {github_owner}/{github_repo}"
+    # Build response message based on what was configured
+    response = "✅ Configuration saved!"
+    if github_owner and github_repo:
+        response += f" GitHub: {github_owner}/{github_repo}"
+    elif anthropic_key:
+        response += " Anthropic API key updated."
+    
+    history.append(["Configuration update", response])
+    return history, "", update_status()
 
 
 def update_github_config(token, owner, repo, reference_pr_url):
@@ -374,7 +431,7 @@ def update_prompt_preview(language, file_path, additional_instruction):
             translation_lang = language
         
         # Get sample content (first 500 characters)
-        content = get_content(file_path)
+        content = get_content(file_path, state.selected_project)
         to_translate = preprocess_content(content)
         
         # Truncate for preview
@@ -385,7 +442,10 @@ def update_prompt_preview(language, file_path, additional_instruction):
         
         return prompt
     except Exception as e:
-        return f"Error generating prompt preview: {str(e)}"
+        error_str = str(e)
+        if "Failed to retrieve content from the URL" in error_str:
+            return f"❌ **File not found:** `{file_path}`\n\n💡 **Please check:**\n1. Is this file in the **{state.selected_project}** project?\n2. Use \"🔍 Find Files to Translate\" to see available files\n3. Verify the file path is correct"
+        return f"Error generating prompt preview: {error_str}"
 
 
 def send_message(message, history):
@@ -394,21 +454,39 @@ def send_message(message, history):
 
 
 # Button handlers with tab switching
-def start_translate_handler(history, file_to_translate, additional_instruction=""):
+def start_translate_handler(history, file_to_translate, additional_instruction="", force_retranslate=False):
     # Use persistent anthropic key
     anthropic_key = state.persistent_settings["anthropic_api_key"]
     if not anthropic_key:
         response = "❌ Please set Anthropic API key in Configuration panel first."
         history.append(["Translation request", response])
-        return history, "", update_status(), gr.Tabs(selected=0)
+        return history, "", update_status(), gr.Tabs(), gr.update(), gr.update()
     
     os.environ["ANTHROPIC_API_KEY"] = anthropic_key
     
+    # Check if file path is provided
+    if not file_to_translate or not file_to_translate.strip():
+        response = "❌ Please select a file from the dropdown or enter a file path to translate."
+        history.append(["Translation request", response])
+        return history, "", update_status(), gr.Tabs(), gr.update(), gr.update()
+    
     state.additional_instruction = additional_instruction
     state.files_to_translate = [file_to_translate]
-    new_hist, cleared_input = handle_user_message("start translation", history)
-    selected_tabs = 2 if state.current_file_content["translated"] else 0
-    return new_hist, cleared_input, update_status(), gr.Tabs(selected=selected_tabs)
+    state.step = "translate"
+    
+    # Start translation directly
+    if force_retranslate:
+        history.append(["Translation request", "🔄 **Force retranslation started...**"])
+    response, translated = start_translation_process(force_retranslate)
+    history.append(["", response])
+    if translated:
+        history.append(["", translated])
+    
+    # Update button text and show confirm button after translation
+    start_btn_text = "🔄 Retranslation" if state.current_file_content["translated"] else "🚀 Start Translation"
+    confirm_btn_visible = bool(state.current_file_content["translated"])
+    
+    return history, "", update_status(), gr.Tabs(), gr.update(value=start_btn_text), gr.update(visible=confirm_btn_visible)
 
 
 def approve_handler(history, owner, repo, reference_pr_url):
@@ -416,15 +494,21 @@ def approve_handler(history, owner, repo, reference_pr_url):
     global state
     state.step = "create_github_pr"
 
-    # Use persistent settings for token, update other values
+    # Check all required GitHub configuration at once
     github_config = state.persistent_settings["github_config"]
+    missing_config = []
+    
     if not github_config.get("token"):
-        response = "❌ Please set GitHub Token in Configuration panel first."
-        history.append(["GitHub PR creation request", response])
-        return history, "", update_status()
-        
-    if not owner or not repo:
-        response = "❌ Please set GitHub Owner and Repository Name in Configuration panel first."
+        missing_config.append("GitHub Token")
+    if not owner:
+        missing_config.append("GitHub Owner")
+    if not repo:
+        missing_config.append("Repository Name")
+    
+    if missing_config:
+        config = get_project_config(state.selected_project)
+        repo_name = config.repo_url.split('/')[-1]  # Extract repo name from URL
+        response = f"❌ Please set the following in Configuration panel first: {', '.join(missing_config)}\n\n💡 **Note:** GitHub Owner/Repository should be your fork of [`{repo_name}`]({config.repo_url}) (e.g., Owner: `your-username`, Repository: `{repo_name}`)"
         history.append(["GitHub PR creation request", response])
         return history, "", update_status()
 
@@ -435,6 +519,9 @@ def approve_handler(history, owner, repo, reference_pr_url):
     # Use persistent settings
     github_config = state.persistent_settings["github_config"]
 
+    # Initialize response variable
+    response = ""
+    
     # If reference PR is not provided, use the agent to find one
     if not github_config.get("reference_pr_url"):
         response = "🤖 **Reference PR URL not found. The agent will now search for a suitable one...**"
@@ -490,6 +577,7 @@ def approve_handler(history, owner, repo, reference_pr_url):
             translated_content=translated_content,
             github_config=state.github_config,
             en_title=file_name,
+            project=state.selected_project,
         )
         response += f"\n{pr_response}"
     else:

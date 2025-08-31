@@ -8,17 +8,23 @@ from dotenv import load_dotenv
 
 from agent.handler import (
     approve_handler,
+    confirm_and_go_translate_handler,
+    confirm_translation_and_go_upload_handler,
     get_welcome_message,
     process_file_search_handler,
     restart_handler,
     send_message,
     start_translate_handler,
     sync_language_displays,
+    update_language_selection,
+    update_project_selection,
     update_prompt_preview,
     update_status,
     update_github_config,
+    update_persistent_config,
 )
 from translator.model import Languages
+from translator.project_config import get_available_projects
 
 load_dotenv()
 
@@ -111,12 +117,54 @@ with gr.Blocks(
             gr.Markdown("### 🌐 Hugging Face i18n Agent")
 
             chatbot = gr.Chatbot(
-                value=[[None, get_welcome_message()]], scale=1, height=585,
+                value=[[None, get_welcome_message()]], scale=1, height=525,
                 show_copy_button=True
             )
+            
+            # Chat input directly under main chat
+            gr.Markdown("### 💬 Chat with agent")
+            with gr.Row():
+                msg_input = gr.Textbox(
+                    placeholder="Type your message here... (e.g. 'what', 'how', or 'help')",
+                    container=False,
+                    scale=4,
+                )
+                send_btn = gr.Button("Send", scale=1, elem_classes="action-button")
 
         # Controller interface
         with gr.Column(scale=2):
+            # Configuration Panel
+            with gr.Column(elem_classes=["control-panel"]):
+                gr.Markdown("### ⚙️ Configuration")
+                
+                with gr.Accordion("🔧 API & GitHub Settings", open=True):
+                    config_anthropic_key = gr.Textbox(
+                        label="🔑 Anthropic API Key",
+                        type="password",
+                        placeholder="sk-ant-...",
+                    )
+                    config_github_token = gr.Textbox(
+                        label="🔑 GitHub Token (Required for PR, Optional for file search)",
+                        type="password", 
+                        placeholder="ghp_...",
+                    )
+                    
+                    with gr.Row():
+                        config_github_owner = gr.Textbox(
+                            label="👤 GitHub Owner",
+                            placeholder="your-username",
+                            scale=1,
+                        )
+                        config_github_repo = gr.Textbox(
+                            label="📁 Repository Name", 
+                            placeholder="your-repository",
+                            scale=1,
+                        )
+                    
+                    save_config_btn = gr.Button(
+                        "💾 Save Configuration", elem_classes="action-button"
+                    )
+                    
             # Quick Controller
             with gr.Column(elem_classes=["control-panel"]):
                 gr.Markdown("### 🛠️ Quick Controls")
@@ -125,6 +173,11 @@ with gr.Blocks(
                 with gr.Tabs(elem_classes="simple-tabs") as control_tabs:
                     with gr.TabItem("1. Find Files", id=0):
                         with gr.Group():
+                            project_dropdown = gr.Radio(
+                                choices=get_available_projects(),
+                                label="🎯 Select Project",
+                                value="transformers",
+                            )
                             lang_dropdown = gr.Radio(
                                 choices=[language.value for language in Languages],
                                 label="🌍 Translate To",
@@ -137,6 +190,11 @@ with gr.Blocks(
                             )
                             find_btn = gr.Button(
                                 "🔍 Find Files to Translate",
+                                elem_classes="action-button",
+                            )
+                            
+                            confirm_go_btn = gr.Button(
+                                "✅ Confirm Selection & Go to Translate",
                                 elem_classes="action-button",
                             )
 
@@ -159,19 +217,19 @@ with gr.Blocks(
                                 value="ko",
                                 interactive=False,
                             )
-                            anthropic_key = gr.Textbox(
-                                label="🔑 Anthropic API key for translation generation",
-                                type="password",
-                            )
                             additional_instruction = gr.Textbox(
                                 label="📝 Additional instructions (Optional - e.g., custom glossary)",
                                 placeholder="Example: Translate 'model' as '모델' consistently",
                                 lines=2,
                             )
                             
-                            with gr.Accordion("🔍 Preview Prompt", open=False):
+                            force_retranslate = gr.Checkbox(
+                                label="🔄 Force Retranslate (ignore existing translations)",
+                                value=False,
+                            )
+                            
+                            with gr.Accordion("🔍 Preview Translation Prompt", open=False):
                                 prompt_preview = gr.Textbox(
-                                    label="Current Translation Prompt",
                                     lines=8,
                                     interactive=False,
                                     placeholder="Select a file and language to see the prompt preview...",
@@ -181,29 +239,18 @@ with gr.Blocks(
                             start_translate_btn = gr.Button(
                                 "🚀 Start Translation", elem_classes="action-button"
                             )
+                            
+                            confirm_upload_btn = gr.Button(
+                                "✅ Confirm Translation & Upload PR",
+                                elem_classes="action-button",
+                                visible=False,
+                            )
 
                     with gr.TabItem("3. Upload PR", id=2):
                         with gr.Group():
-                            github_token = gr.Textbox(
-                                label="🔑 GitHub Token",
-                                type="password",
-                                placeholder="ghp_xxxxxxxxxxxxxxxxxxxx",
-                            )
-                            github_owner = gr.Textbox(
-                                label="👤 GitHub Owner/Username",
-                                placeholder="your-username",
-                            )
-                            github_repo = gr.Textbox(
-                                label="📁 Repository Name",
-                                placeholder="your-repository",
-                            )
                             reference_pr_url = gr.Textbox(
-                                label="🔗 Reference PR URL (Optional - Agent will find one if not provided)",
-                                placeholder="reference PR URL",
-                            )
-
-                            save_config_btn = gr.Button(
-                                "💾 Save GitHub Config", elem_classes="action-button"
+                                label="🔗 Reference PR URL (Optional)",
+                                placeholder="Auto-filled based on project selection",
                             )
                             approve_btn = gr.Button(
                                 "✅ Generate GitHub PR", elem_classes="action-button"
@@ -212,29 +259,38 @@ with gr.Blocks(
                                 "🔄 Restart Translation", elem_classes="action-button"
                             )
 
-            # Chat Controller
-            with gr.Column(elem_classes=["control-panel"]):
-                gr.Markdown("### 💬 Chat with agent (Only simple chat is available)")
-                msg_input = gr.Textbox(
-                    placeholder="Type your message here... (e.g. 'what', 'how', or 'help')",
-                    container=False,
-                    scale=4,
-                )
-                send_btn = gr.Button("Send", scale=1, elem_classes="action-button")
-
     # Event Handlers
 
     find_btn.click(
         fn=process_file_search_handler,
-        inputs=[lang_dropdown, k_input, chatbot],
+        inputs=[project_dropdown, lang_dropdown, k_input, chatbot],
         outputs=[chatbot, msg_input, status_display, control_tabs, files_to_translate],
     )
+    
+    confirm_go_btn.click(
+        fn=confirm_and_go_translate_handler,
+        inputs=[chatbot],
+        outputs=[chatbot, msg_input, status_display, control_tabs],
+    )
 
-    # Sync language across tabs
+    # Auto-save selections to state and update prompt preview
+    project_dropdown.change(
+        fn=update_project_selection,
+        inputs=[project_dropdown, chatbot],
+        outputs=[chatbot, msg_input, status_display],
+    )
+    
+    # Update prompt preview when project changes
+    project_dropdown.change(
+        fn=update_prompt_preview,
+        inputs=[translate_lang_display, file_to_translate_input, additional_instruction],
+        outputs=[prompt_preview],
+    )
+    
     lang_dropdown.change(
-        fn=sync_language_displays,
-        inputs=[lang_dropdown],
-        outputs=[translate_lang_display],
+        fn=update_language_selection,
+        inputs=[lang_dropdown, chatbot],
+        outputs=[chatbot, msg_input, status_display, translate_lang_display],
     )
 
     #
@@ -247,20 +303,26 @@ with gr.Blocks(
     # Button event handlers
     start_translate_btn.click(
         fn=start_translate_handler,
-        inputs=[chatbot, anthropic_key, file_to_translate_input, additional_instruction],
+        inputs=[chatbot, file_to_translate_input, additional_instruction, force_retranslate],
+        outputs=[chatbot, msg_input, status_display, control_tabs, start_translate_btn, confirm_upload_btn],
+    )
+    
+    confirm_upload_btn.click(
+        fn=confirm_translation_and_go_upload_handler,
+        inputs=[chatbot],
         outputs=[chatbot, msg_input, status_display, control_tabs],
     )
 
-    # GitHub Config Save
+    # Configuration Save
     save_config_btn.click(
-        fn=update_github_config,
-        inputs=[github_token, github_owner, github_repo, reference_pr_url],
-        outputs=[msg_input],
+        fn=update_persistent_config,
+        inputs=[config_anthropic_key, config_github_token, config_github_owner, config_github_repo, reference_pr_url, chatbot],
+        outputs=[chatbot, msg_input, status_display],
     )
 
     approve_btn.click(
         fn=approve_handler,
-        inputs=[chatbot, github_owner, github_repo, reference_pr_url],
+        inputs=[chatbot, config_github_owner, config_github_repo, reference_pr_url],
         outputs=[chatbot, msg_input, status_display],
     )
 

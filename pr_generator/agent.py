@@ -34,9 +34,13 @@ except ImportError as e:
 class GitHubPRAgent:
     """Agent class for GitHub PR creation"""
 
-    def __init__(self):
+    def __init__(self, user_owner: str = None, user_repo: str = None, base_owner: str = None, base_repo: str = None):
         self._github_client = None
         self._llm = None
+        self.user_owner = user_owner
+        self.user_repo = user_repo
+        self.base_owner = base_owner
+        self.base_repo = base_repo
 
     @property
     def github_client(self) -> Optional[Github]:
@@ -433,8 +437,6 @@ Please return only the commit message. No other explanation is needed."""
         target_language: str,
         filepath: str,
         translated_doc: str,
-        owner: str,
-        repo_name: str,
         base_branch: str = "main",
     ) -> Dict[str, Any]:
         """Execute translation document PR creation workflow."""
@@ -458,19 +460,20 @@ Please return only the commit message. No other explanation is needed."""
             )
 
             # 3. Get main branch SHA from upstream and create branch in fork
-            upstream_repo = self.github_client.get_repo(f"huggingface/{repo_name}")
+            upstream_repo = self.github_client.get_repo(f"{self.base_owner}/{self.base_repo}")
             main_branch = upstream_repo.get_branch(base_branch)
             main_sha = main_branch.commit.sha
 
             print(f"🌿 Creating branch: {branch_name} in fork repository")
-            branch_result = self.create_branch(owner, repo_name, branch_name, main_sha)
+            branch_result = self.create_branch(self.user_owner, self.user_repo, branch_name, main_sha)
 
             # Check branch creation result
             if branch_result.startswith("ERROR"):
                 return {
                     "status": "error",
-                    "message": f"Branch creation failed: {branch_result}",
+                    "message": f"Branch creation failed: {branch_result}\n\nTarget: {self.user_owner}/{self.user_repo}\nBranch: {branch_name}\nBase SHA: {main_sha[:8]}",
                     "branch": branch_name,
+                    "error_details": branch_result,
                 }
             elif branch_result.startswith("WARNING"):
                 print(f"⚠️ {branch_result}")
@@ -489,8 +492,8 @@ Please return only the commit message. No other explanation is needed."""
 
             print(f"📄 Saving file: {target_filepath}")
             file_result = self.create_or_update_file(
-                owner,
-                repo_name,
+                self.user_owner,
+                self.user_repo,
                 target_filepath,
                 commit_message,
                 translated_doc,
@@ -500,9 +503,10 @@ Please return only the commit message. No other explanation is needed."""
             if not file_result.startswith("SUCCESS"):
                 return {
                     "status": "error",
-                    "message": "An issue occurred while saving the file.",
+                    "message": f"File save failed: {file_result}\n\n🎯 Target: {self.user_owner}/{self.user_repo} (expected: {target_language} fork of {self.base_owner}/{self.base_repo})\n🌿 Branch: {branch_name}\n📁 File: {target_filepath}",
                     "branch": branch_name,
                     "file_path": target_filepath,
+                    "error_details": file_result,
                 }
 
             print(f"{file_result}")
@@ -518,11 +522,11 @@ Please return only the commit message. No other explanation is needed."""
             )
 
             print(f"🔄 Creating PR: {pr_title}")
-            print(f"   Head: {owner}:{branch_name} → Base: huggingface:{base_branch}")
+            print(f"   Head: {self.user_owner}:{branch_name} → Base: {self.base_owner}:{base_branch}")
 
             # Create PR from fork to upstream repository
             pr_result = self.create_pull_request(
-                "huggingface", "transformers", pr_title, f"{owner}:{branch_name}", base_branch, pr_body, draft=True
+                self.base_owner, self.base_repo, pr_title, f"{self.user_owner}:{branch_name}", base_branch, pr_body, draft=True
             )
 
             if pr_result.startswith("ERROR"):
@@ -554,7 +558,8 @@ Please return only the commit message. No other explanation is needed."""
         except Exception as e:
             return {
                 "status": "error",
-                "message": f"Error occurred during workflow execution: {str(e)}",
+                "message": f"Workflow execution failed: {str(e)}\n\nConfig: {self.user_owner}/{self.user_repo} → {self.base_owner}/{self.base_repo}\nFile: {filepath if 'filepath' in locals() else 'Unknown'}",
+                "error_details": str(e),
             }
 
 

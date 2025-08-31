@@ -271,25 +271,10 @@ class GitHubPRAgent:
     def generate_branch_name_from_reference(
         self, reference_branch_name: str, target_language: str, file_name: str
     ) -> str:
-        """Use LLM to analyze reference PR information and generate appropriate branch name."""
-        prompt = f"""Here is the reference PR information:
-
-Reference PR branch name: {reference_branch_name}
-
-Now I need to generate a branch name for a new translation task:
-- Target language: {target_language}
-- File to translate: {file_name}
-
-Please analyze the pattern and style of the reference PR title to generate a consistent new branch name.
-
-Requirements:
-1. Follow the naming conventions and patterns of the reference PR
-2. Appropriately reflect the target language ({target_language}) and file name ({file_name}) if applicable
-
-Please return only the branch name. No other explanation is needed."""
-
-        fallback = f"translate-{target_language}-{file_name.replace('_', '-')}"
-        return self._generate_with_llm(prompt, fallback, "branch name")
+        """Generate branch name using simple template."""
+        # Keep .md extension and make branch-safe
+        branch_safe_name = file_name.replace('_', '-')
+        return f"{target_language}-{branch_safe_name}"
 
     def generate_pr_content_from_reference(
         self,
@@ -383,34 +368,8 @@ Add {target_language} translation for `{filepath}`.
     def generate_commit_message_from_reference(
         self, commit_messages: List[str], target_language: str, file_name: str
     ) -> str:
-        """Use LLM to analyze reference PR commit messages and generate appropriate commit message."""
-        commits_text = (
-            "\n".join([f"- {msg}" for msg in commit_messages])
-            if commit_messages
-            else "None"
-        )
-
-        prompt = f"""Here are the commit messages from the reference PR:
-
-{commits_text}
-
-Now I need to generate a commit message for a new translation task:
-- Target language: {target_language}
-- File to translate: {file_name}
-
-Please analyze the commit message patterns and style of the reference PR to generate a consistent new commit message.
-
-Requirements:
-1. Follow the commit message style and format of the reference PR
-2. Appropriately reflect the target language ({target_language}) and file name ({file_name})
-3. Follow general Git commit message conventions
-4. Be concise and clear
-5. If you detect typos in the given commit messages, use corrected versions (e.g., dos -> docs)
-
-Please return only the commit message. No other explanation is needed."""
-
-        fallback = f"docs: add {target_language} translation for {file_name}"
-        return self._generate_with_llm(prompt, fallback, "commit message")
+        """Generate simple commit message using template."""
+        return f"docs: {target_language}: {file_name}"
 
     def get_branch_info(self, owner: str, repo_name: str, branch_name: str) -> str:
         """Get information about an existing branch."""
@@ -452,7 +411,7 @@ Please return only the commit message. No other explanation is needed."""
 
             # 2. Generate translation file path and branch name
             target_filepath = filepath.replace("/en/", f"/{target_language}/")
-            file_name = filepath.split("/")[-1].replace(".md", "")
+            file_name = filepath.split("/")[-1]  # Keep .md extension
 
             print(f"🌿 Generating branch name...")
             branch_name = self.generate_branch_name_from_reference(

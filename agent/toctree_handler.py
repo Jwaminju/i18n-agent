@@ -134,8 +134,10 @@ Korean title:"""
             english_title = self.find_title_for_local(en_toctree, target_local)
             
             if not english_title:
-                print(f"Could not find English title for local: {target_local}")
-                return ko_toctree
+                print(f"⚠️ Toctree entry not found: '{target_local}' not in English toctree")
+                print(f"🔍 Attempting to find appropriate section for new entry...")
+                # Try to add new entry in appropriate location
+                return self.add_new_toctree_entry(ko_toctree, target_local)
             
             print(f"Found English title: {english_title} for local: {target_local}")
             
@@ -153,10 +155,11 @@ Korean title:"""
             )
             
             if updated:
-                print(f"Successfully updated translation entry: local={target_local}, title={korean_title}")
+                print(f"✅ Successfully updated translation entry: local={target_local}, title={korean_title}")
                 return updated_toctree
             else:
-                print(f"Could not find '(번역중) {english_title}' entry to update")
+                print(f"⚠️ Toctree update skipped: '(번역중) {english_title}' entry not found")
+                print(f"📋 This may be a new file not yet added to Korean toctree")
                 return ko_toctree
                 
         except Exception as e:
@@ -192,8 +195,8 @@ Korean title:"""
         # Get Korean toctree
         ko_toctree = self.get_ko_toctree()
         
-        # Update Korean toctree with replacement logic
-        updated_ko_toctree = self.create_updated_toctree_with_replacement(ko_toctree, filepath_without_prefix)
+        # Use diff-merge algorithm to add new entry
+        updated_ko_toctree = self.add_new_toctree_entry(ko_toctree, filepath_without_prefix)
         
         if not updated_ko_toctree:
             print(f"Failed to create updated Korean toctree for local: {filepath_without_prefix}")
@@ -287,3 +290,130 @@ Korean title:"""
                 "status": "error",
                 "message": f"Error updating toctree: {str(e)}"
             }
+    
+    def add_new_toctree_entry(self, ko_toctree: list, target_local: str) -> list:
+        """Add new toctree entry using diff-merge algorithm"""
+        try:
+            import copy
+            updated_toctree = copy.deepcopy(ko_toctree)
+            
+            # Generate new entry
+            filename = target_local.split('/')[-1].replace('_', ' ').title()
+            korean_title = self.translate_title(filename)
+            new_entry = {
+                'local': target_local,
+                'title': korean_title
+            }
+            
+            # Get English toctree for structure reference
+            en_toctree = self.get_en_toctree()
+            
+            # Use diff-merge algorithm
+            if self.merge_toctree_sections(en_toctree, updated_toctree, target_local, new_entry):
+                return updated_toctree
+            else:
+                # Fallback: add to root level
+                updated_toctree.append(new_entry)
+                print(f"✅ Added new entry at root level: {target_local} -> {korean_title}")
+                return updated_toctree
+                
+        except Exception as e:
+            print(f"❌ Error adding new toctree entry: {e}")
+            return ko_toctree
+    
+    def merge_toctree_sections(self, en_toctree: list, ko_toctree: list, target_local: str, new_entry: dict) -> bool:
+        """Merge English toctree structure into Korean toctree for target_local"""
+        for en_section in en_toctree:
+            en_title = en_section.get('title')
+            
+            # Check if this English section contains our target
+            if self.contains_target(en_section, target_local):
+                # Find matching Korean section
+                ko_section = self.find_matching_section(ko_toctree, en_title)
+                
+                if ko_section:
+                    # Section exists - merge subsections
+                    return self.merge_subsections(en_section, ko_section, target_local, new_entry)
+                else:
+                    # Section doesn't exist - create new section
+                    new_ko_section = self.create_section_with_order(en_section, target_local, new_entry)
+                    ko_toctree.append(new_ko_section)
+                    print(f"✅ Created new section '{new_ko_section.get('title')}' with ordered structure")
+                    return True
+        return False
+    
+    def contains_target(self, section: dict, target_local: str) -> bool:
+        """Check if section contains target_local recursively"""
+        if 'sections' in section:
+            for subsection in section['sections']:
+                if subsection.get('local') == target_local:
+                    return True
+                if self.contains_target(subsection, target_local):
+                    return True
+        return False
+    
+    def find_matching_section(self, ko_toctree: list, en_title: str) -> dict:
+        """Find Korean section that matches English title"""
+        # Try exact match first
+        for item in ko_toctree:
+            if item.get('title') == en_title:
+                return item
+        
+        # Try translated title match
+        try:
+            translated_title = self.translate_title(en_title)
+            for item in ko_toctree:
+                if item.get('title') == translated_title:
+                    return item
+        except:
+            pass
+                
+        return None
+    
+    def merge_subsections(self, en_section: dict, ko_section: dict, target_local: str, new_entry: dict) -> bool:
+        """Merge subsections while maintaining order"""
+        if 'sections' not in en_section:
+            return False
+            
+        # Find target index in English sections
+        target_index = -1
+        for i, en_subsection in enumerate(en_section['sections']):
+            if en_subsection.get('local') == target_local:
+                target_index = i
+                break
+        
+        if target_index == -1:
+            return False
+            
+        # Ensure Korean section has sections array
+        if 'sections' not in ko_section:
+            ko_section['sections'] = []
+            
+        # Insert at correct position
+        self.insert_at_correct_position(ko_section, target_index, new_entry)
+        return True
+    
+    def insert_at_correct_position(self, ko_section: dict, target_index: int, new_entry: dict):
+        """Insert entry at correct position, expanding array if needed"""
+        sections = ko_section['sections']
+        
+        # Expand sections array if needed
+        while len(sections) <= target_index:
+            sections.append(None)  # Placeholder
+        
+        # Insert new entry
+        sections[target_index] = new_entry
+        
+        # Clean up None placeholders at the end
+        while sections and sections[-1] is None:
+            sections.pop()
+    
+    def create_section_with_order(self, en_section: dict, target_local: str, new_entry: dict) -> dict:
+        """Create new Korean section with only the translated entry"""
+        new_ko_section = {
+            'title': self.translate_title(en_section.get('title')),
+            'isExpanded': en_section.get('isExpanded', False),
+            'sections': [new_entry]  # Only add the translated entry
+        }
+        
+        return new_ko_section

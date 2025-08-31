@@ -261,19 +261,47 @@ def generate_github_pr(
 {result["message"]}"""
 
         elif result["status"] == "partial_success":
-            return f"""⚠️ **Partial Success**
+            error_details = result.get("error_details", "Unknown error")
+            
+            # Check if it's "existing PR" case (not really an error)
+            if "Existing PR found" in error_details:
+                existing_pr_url = error_details.split(": ")[-1] if ": " in error_details else "Unknown"
+                return f"""🔄 **Translation Updated Successfully**
 
+🎯 **Selected Project:** {project}
+🌿 **Branch:** {result["branch"]}
+📁 **File:** {result["file_path"]}{toctree_status}
+
+🔗 **Existing PR Updated:** {existing_pr_url}
+
+✅ Your translation has been added to the existing PR. The file and toctree have been successfully updated!"""
+            else:
+                # Actual error case
+                return f"""⚠️ **Partial Success**
+
+🎯 **Selected Project:** {project}
+🏠 **User Fork:** {github_config.get('owner', 'USER')}/{github_config.get('repo_name', 'REPO')}
+🎯 **Target Base:** {base_owner}/{base_repo}
 🌿 **Branch:** {result["branch"]}
 📁 **File:** {result["file_path"]}{toctree_status}
 
 {result["message"]}
 
 **Error Details:**
-{result.get("error_details", "Unknown error")}"""
+{error_details}
+
+💡 **Project-Repository Mismatch Check:**
+- Selected project '{project}' should match repository '{github_config.get('repo_name', 'REPO')}'
+- For smolagents: use Jwaminju/smolagents fork
+- For transformers: use Jwaminju/transformers fork"""
 
         else:
             error_details = result.get("error_details", "No additional details")
             return f"""❌ **GitHub PR Creation Failed**
+
+🎯 **Selected Project:** {project}
+🏠 **User Fork:** {github_config.get('owner', 'USER')}/{github_config.get('repo_name', 'REPO')}
+🎯 **Target Base:** {base_owner}/{base_repo}
 
 **Error Message:**
 {result["message"]}
@@ -281,10 +309,10 @@ def generate_github_pr(
 **Error Details:**
 {error_details}
 
-💡 **Common Solutions:**
-1. **Project Mismatch**: Selected project '{project}' but fork is '{github_config.get('repo_name', 'REPO')}' - ensure they match
-2. Check if your GitHub fork exists: {github_config.get('owner', 'USER')}/{github_config.get('repo_name', 'REPO')}
-3. Verify GitHub token has write access to your fork"""
+💡 **Project-Repository Mismatch:**
+Selected project '{project}' but configured repository '{github_config.get('repo_name', 'REPO')}'
+• For smolagents project: use 'smolagents' repository
+• For transformers project: use 'transformers' repository"""
 
     except Exception as e:
         error_msg = f"""❌ **Unexpected Error During PR Creation**

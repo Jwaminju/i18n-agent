@@ -14,6 +14,7 @@ from agent.workflow import (
 from pr_generator.searcher import find_reference_pr_simple_stream
 from translator.content import get_full_prompt, get_content, preprocess_content
 from translator.project_config import get_available_projects, get_project_config
+from app import default_models
 
 
 # State management
@@ -32,7 +33,8 @@ class ChatState:
         
         # Persistent settings (preserved across restarts)
         self.persistent_settings = {
-            "anthropic_api_key": "",
+            "huggingface_api_key": "",
+            "huggingface_model_name": list(default_models.values())[0], # Default to the first model
             "github_config": {
                 "token": "",
                 "owner": "",
@@ -179,7 +181,7 @@ def confirm_translation_and_go_upload_handler(history):
     return history, "", update_status(), gr.Tabs(selected=2)
 
 
-def start_translation_process(force_retranslate=False):
+def start_translation_process(force_retranslate=False, huggingface_model_name=""):
     """Start the translation process for the first file"""
     if not state.files_to_translate:
         return "❌ No files available for translation.", ""
@@ -189,7 +191,7 @@ def start_translation_process(force_retranslate=False):
     # Call translation function (simplified for demo)
     try:
         status, translated = translate_docs_interactive(
-            state.target_language, [[current_file]], state.additional_instruction, state.selected_project, force_retranslate
+            state.target_language, [[current_file]], state.additional_instruction, state.selected_project, force_retranslate, huggingface_model_name
         )
 
         state.current_file_content = {"translated": translated}
@@ -374,14 +376,20 @@ def update_language_selection(lang, history):
     return history, "", update_status(), lang
 
 
-def update_persistent_config(anthropic_key, github_token, github_owner, github_repo, reference_pr_url, history):
+def update_persistent_config(huggingface_key, huggingface_model_select, huggingface_model_input, github_token, github_owner, github_repo, reference_pr_url, history):
     """Update persistent configuration settings."""
     global state
     
-    # Update API keys
-    if anthropic_key:
-        state.persistent_settings["anthropic_api_key"] = anthropic_key
-        os.environ["ANTHROPIC_API_KEY"] = anthropic_key
+    # Determine the final Hugging Face model name
+    huggingface_model_name = huggingface_model_input if huggingface_model_input else default_models[huggingface_model_select]
+
+    # Update API keys and model
+    if huggingface_key:
+        state.persistent_settings["huggingface_api_key"] = huggingface_key
+        os.environ["HUGGINGFACE_API_KEY"] = huggingface_key
+    
+    if huggingface_model_name:
+        state.persistent_settings["huggingface_model_name"] = huggingface_model_name
     
     if github_token:
         os.environ["GITHUB_TOKEN"] = github_token
@@ -406,8 +414,10 @@ def update_persistent_config(anthropic_key, github_token, github_owner, github_r
     response = "✅ Configuration saved!"
     if github_owner and github_repo:
         response += f" GitHub: {github_owner}/{github_repo}"
-    elif anthropic_key:
-        response += " Anthropic API key updated."
+    if huggingface_key:
+        response += " Hugging Face API key updated."
+    if huggingface_model_name:
+        response += f" Hugging Face Model: {huggingface_model_name}"
     
     history.append(["Configuration update", response])
     return history, "", update_status()
@@ -454,15 +464,20 @@ def send_message(message, history):
 
 
 # Button handlers with tab switching
-def start_translate_handler(history, file_to_translate, additional_instruction="", force_retranslate=False):
-    # Use persistent anthropic key
-    anthropic_key = state.persistent_settings["anthropic_api_key"]
-    if not anthropic_key:
-        response = "❌ Please set Anthropic API key in Configuration panel first."
+def start_translate_handler(history, file_to_translate, additional_instruction="", force_retranslate=False, huggingface_model_name=""):
+    # Use persistent Hugging Face model name
+    if not huggingface_model_name:
+        huggingface_model_name = state.persistent_settings["huggingface_model_name"]
+
+    if not huggingface_model_name:
+        response = "❌ Please select or enter a Hugging Face model in Configuration panel first."
         history.append(["Translation request", response])
         return history, "", update_status(), gr.Tabs(), gr.update(), gr.update()
     
-    os.environ["ANTHROPIC_API_KEY"] = anthropic_key
+    # Set Hugging Face API key if available
+    huggingface_key = state.persistent_settings["huggingface_api_key"]
+    if huggingface_key:
+        os.environ["HUGGINGFACE_API_KEY"] = huggingface_key
     
     # Check if file path is provided
     if not file_to_translate or not file_to_translate.strip():
@@ -477,7 +492,7 @@ def start_translate_handler(history, file_to_translate, additional_instruction="
     # Start translation directly
     if force_retranslate:
         history.append(["Translation request", "🔄 **Force retranslation started...**"])
-    response, translated = start_translation_process(force_retranslate)
+    response, translated = start_translation_process(force_retranslate, huggingface_model_name)
     history.append(["", response])
     if translated:
         history.append(["", translated])
@@ -600,8 +615,10 @@ def restart_handler(history):
     state.persistent_settings = backup_settings
     
     # Restore environment variables
-    if backup_settings["anthropic_api_key"]:
-        os.environ["ANTHROPIC_API_KEY"] = backup_settings["anthropic_api_key"]
+    if backup_settings["huggingface_api_key"]:
+        os.environ["HUGGINGFACE_API_KEY"] = backup_settings["huggingface_api_key"]
+    if backup_settings["huggingface_model_name"]:
+        state.persistent_settings["huggingface_model_name"] = backup_settings["huggingface_model_name"]
     if backup_settings["github_config"]["token"]:
         os.environ["GITHUB_TOKEN"] = backup_settings["github_config"]["token"]
     

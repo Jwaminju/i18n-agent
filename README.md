@@ -66,7 +66,7 @@ This project was specifically created to solve [Hugging Face Transformers Issue 
 [![Open in Spaces](https://huggingface.co/datasets/huggingface/badges/raw/main/open-in-hf-spaces-md-dark.svg)](https://huggingface.co/spaces/YOUR_USERNAME/i18n-agent)
 
 ✅ **No setup required!** Just click and start translating.  
-✅ **Pre-requisites!** Need `Anthropic API key` and `Github token`.
+✅ **Pre-requisites!** Need `Hugging Face API key` and `Github token`.
 
 ### Option 2: Run Locally
 
@@ -84,7 +84,7 @@ source .venv/bin/activate
 
 # Set up your keys
 cp .env.example .env
-# Add your Anthropic API key and GitHub token
+# Add your Hugging Face API key and GitHub token
 
 # Launch the app
 python app.py
@@ -116,7 +116,7 @@ graph LR
 - Let AI identify the most impactful Transformers docs translations
 
 ### Step 2: 🤖 Smart Translation
-- Enter your Anthropic API key
+- Enter your Hugging Face API key
 - Claude Sonnet 4 translates with context awareness
 - Technical terms and code blocks preserved automatically
 
@@ -172,7 +172,7 @@ graph LR
 Prepare these secrets:
 
 ```bash
-ANTHROPIC_API_KEY=your_claude_api_key
+HUGGINGFACE_API_KEY=your_huggingface_api_key
 GITHUB_TOKEN=your_github_token  
 ```
 
@@ -180,7 +180,7 @@ GITHUB_TOKEN=your_github_token
 Create `.env` file:
 
 ```bash
-ANTHROPIC_API_KEY=<your api key>
+HUGGINGFACE_API_KEY=<your api key>
 
 # GitHub PR Agent Configuration
 GITHUB_TOKEN=<your github token>
@@ -222,7 +222,7 @@ REFERENCE_PR_URL=<reference pr url for style analysis>
 
 ![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
 ![Gradio](https://img.shields.io/badge/gradio-FF6B35?style=for-the-badge&logo=gradio&logoColor=white)
-![Anthropic](https://img.shields.io/badge/Claude-191919?style=for-the-badge&logo=anthropic&logoColor=white)
+
 ![GitHub](https://img.shields.io/badge/github-%23121011.svg?style=for-the-badge&logo=github&logoColor=white)
 ![LangChain](https://img.shields.io/badge/LangChain-121212?style=for-the-badge&logo=chainlink&logoColor=white)
 
@@ -261,7 +261,7 @@ Yes! You can provide reference PR URLs to match existing translation patterns an
 <details>
 <summary><strong>API Key Issues</strong></summary>
 
-- Ensure your Anthropic API key is valid and has sufficient credits  
+- Ensure your Hugging Face API key is valid and has sufficient credits  
 - Check that your GitHub token has the necessary repository permissions  
 
 </details>
@@ -289,7 +289,7 @@ Yes! You can provide reference PR URLs to match existing translation patterns an
 Special thanks to the amazing communities that make this possible:
 
 - **🤗 Hugging Face** - For building the Transformers library and comprehensive documentation
-- **🎭 Anthropic** - For Claude's incredible language capabilities  
+  
 - **👥 Hugging Face KREW Community** - For championing Korean AI translation
 - **🎨 Gradio** - For making beautiful AI interfaces simple
 - **🌍 Community Contributors** - For raising awareness through [Issue #20179](https://github.com/huggingface/transformers/issues/20179)

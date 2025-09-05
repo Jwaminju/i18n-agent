@@ -15,14 +15,15 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Constants definition
-ANTHROPIC_MODEL_ID = "claude-sonnet-4-20250514"
+DEFAULT_HF_MODEL_ID = "Helsinki-NLP/opus-mt-en-ko"
 DEFAULT_TEMPERATURE = 0.0
 
 # Library imports and error handling
 try:
     from github import Github, GithubException
+    from transformers import pipeline, AutoModelForSeq2SeqLM, AutoTokenizer
     from github.GitRef import GitRef
-    from langchain_anthropic import ChatAnthropic
+    
 
     REQUIRED_LIBS_AVAILABLE = True
 except ImportError as e:
@@ -34,13 +35,14 @@ except ImportError as e:
 class GitHubPRAgent:
     """Agent class for GitHub PR creation"""
 
-    def __init__(self, user_owner: str = None, user_repo: str = None, base_owner: str = None, base_repo: str = None):
+    def __init__(self, user_owner: str = None, user_repo: str = None, base_owner: str = None, base_repo: str = None, huggingface_model_name: str = None):
         self._github_client = None
         self._llm = None
         self.user_owner = user_owner
         self.user_repo = user_repo
         self.base_owner = base_owner
         self.base_repo = base_repo
+        self.huggingface_model_name = huggingface_model_name
 
     @property
     def github_client(self) -> Optional[Github]:
@@ -64,10 +66,13 @@ class GitHubPRAgent:
             raise ImportError("Required libraries not found.")
 
         if self._llm is None:
-            self._llm = ChatAnthropic(
-                model=ANTHROPIC_MODEL_ID,
-                temperature=DEFAULT_TEMPERATURE,
-            )
+            model_id = self.huggingface_model_name if self.huggingface_model_name else DEFAULT_HF_MODEL_ID
+            try:
+                model = AutoModelForSeq2SeqLM.from_pretrained(model_id)
+                tokenizer = AutoTokenizer.from_pretrained(model_id)
+                self._llm = pipeline("text2text-generation", model=model, tokenizer=tokenizer)
+            except Exception as e:
+                raise ValueError(f"Failed to load Hugging Face model {model_id}: {e}")
         return self._llm
 
     def _handle_github_error(self, e: Exception, operation: str) -> str:
@@ -259,8 +264,8 @@ class GitHubPRAgent:
     ) -> str:
         """Generate text using LLM."""
         try:
-            response = self.llm.invoke(prompt)
-            generated = response.content.strip()
+            response = self.llm(prompt, max_new_tokens=512)
+            generated = response[0]['generated_text'].strip()
             print(f"LLM generated {operation}: {generated}")
             return generated
         except Exception as e:
@@ -564,7 +569,7 @@ Please return only the commit message. No other explanation is needed."""
 
 
 # Backward compatibility functions (maintain compatibility with existing code)
-_agent = GitHubPRAgent()
+_agent = GitHubPRAgent(huggingface_model_name=DEFAULT_HF_MODEL_ID)
 
 
 def get_github_client():

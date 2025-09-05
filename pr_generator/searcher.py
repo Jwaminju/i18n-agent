@@ -21,10 +21,7 @@ logger = logging.getLogger(__name__)
 
 # Langchain imports
 try:
-    from langchain_anthropic import ChatAnthropic
-    from langchain.tools import StructuredTool
-    from langchain.agents import AgentExecutor, create_tool_calling_agent
-    from langchain_core.prompts import ChatPromptTemplate
+    from transformers import pipeline, AutoModelForSeq2SeqLM, AutoTokenizer
     from github import Github
 
     REQUIRED_LIBS_AVAILABLE = True
@@ -33,7 +30,7 @@ except ImportError as e:
     REQUIRED_LIBS_AVAILABLE = False
 
 # Constants
-ANTHROPIC_MODEL_ID = "claude-sonnet-4-20250514"
+DEFAULT_HF_MODEL_ID = "Helsinki-NLP/opus-mt-en-ko"
 DEFAULT_TEMPERATURE = 0.0
 # Fallback PR URL to ensure a PR is always returned
 DEFAULT_FALLBACK_PR_URL = "https://github.com/huggingface/transformers/pull/24968"
@@ -70,45 +67,7 @@ class GitHubPRSearcher:
             raise ImportError("Required libraries for agent could not be found.")
 
         self._github_client = None
-        self.llm = ChatAnthropic(
-            model=ANTHROPIC_MODEL_ID,
-            temperature=DEFAULT_TEMPERATURE,
-        )
-
-        search_tool = StructuredTool.from_function(
-            func=self._search_github_prs,
-            name="search_github_prs",
-            description="Searches GitHub for pull requests matching the query and returns the top 5 results. The query should be a valid GitHub search query.",
-        )
-        tools = [search_tool]
-
-        prompt_string = """You are a GitHub expert. Your mission is to find the best reference pull request (PR) for a given task.
-
-You need to find a merged PR in the repository: {owner}/{repo_name}.
-The PR should be for a documentation translation into **{target_language}**.
-The context for the translation is: **{context}**.
-
-Use the tools at your disposal to search for relevant PRs.
-Analyze the search results and select the one that best matches the request. A good PR is usually one that has "translation", "docs", "i18n", and the target language in its title.
-
-Here is an example of a good search query you could use:
-`repo:{owner}/{repo_name} is:pr is:merged "{target_language}" "{context}" i18n translation docs`
-
-After your analysis, you MUST output **only the final URL** of the best PR you have chosen. Do not include any other text in your final response."""
-
-        prompt = ChatPromptTemplate.from_messages(
-            [
-                ("system", prompt_string),
-                (
-                    "human",
-                    "Find the best reference PR for translating docs to {target_language} about {context} in the {owner}/{repo_name} repository.",
-                ),
-                ("placeholder", "{agent_scratchpad}"),
-            ]
-        )
-
-        agent = create_tool_calling_agent(self.llm, tools, prompt)
-        self.agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=False)
+        self.llm_pipeline = None # Initialize Hugging Face pipeline here if needed later
 
     @property
     def github_client(self) -> Optional[Github]:
@@ -129,65 +88,37 @@ After your analysis, you MUST output **only the final URL** of the best PR you h
         self, owner: str, repo_name: str, target_language: str, context: str
     ):
         """
-        Finds the best reference PR using a LangChain agent.
+        Finds the best reference PR using a keyword-based search.
         Yields progress and returns the final PR URL.
         """
-        message = "🤖 Agent is searching for the best reference PR..."
+        message = "🤖 Searching for the best reference PR using keywords..."
         logger.info(message)
         yield message
 
         try:
-            agent_input = {
-                "owner": owner,
-                "repo_name": repo_name,
-                "target_language": target_language,
-                "context": context,
-            }
+            # Construct a robust search query
+            query = f"repo:{owner}/{repo_name} is:pr is:merged \"{target_language}\" \"{context}\" i18n translation docs"
+            
+            # Execute GitHub search
+            search_results = self._search_github_prs(query)
 
-            agent_output = None
-            for event in self.agent_executor.stream(agent_input):
-                if "actions" in event and event["actions"]:
-                    action = event["actions"][0]
-                    tool_query = action.tool_input.get("query", str(action.tool_input))
-                    message = f"🔍 Agent is using tool `{action.tool}` with query:\n`{tool_query}`"
-                    logger.info(message)
-                    yield message
-                elif "steps" in event and event["steps"]:
-                    message = "📊 Agent is analyzing the results from the tool..."
-                    logger.info(message)
-                    yield message
-                elif "output" in event and event["output"]:
-                    agent_output = event["output"]
-
-            if not agent_output:
-                message = "⚠️ Agent failed to find a suitable PR. Using default PR."
+            if not search_results:
+                message = "⚠️ No suitable PRs found. Using default PR."
                 logger.warning(message)
                 yield message
                 return DEFAULT_FALLBACK_PR_URL
 
-            # The agent's final output can be a string, a list of tool results,
-            # or a list of content blocks from the LLM. We'll find the URL
-            # by searching for it in the string representation of the output.
-            output_text = str(agent_output)
-            urls = re.findall(r"https?://github.com/[^/]+/[^/]+/pull/\d+", output_text)
+            # Simple logic to pick the best PR: just take the first one for now
+            # In a more advanced scenario, an LLM could analyze titles/bodies
+            best_pr_url = search_results[0]["url"]
 
-            final_url = ""
-            if urls:
-                final_url = urls[-1]  # Take the last URL found
-
-            if not final_url:
-                message = f"⚠️ Agent returned unparsable output: {agent_output}. Using default PR."
-                logger.warning(message)
-                yield message
-                return DEFAULT_FALLBACK_PR_URL
-
-            message = f"✅ Selected the best PR:\n`{final_url}`"
-            logger.info(f"Selected the best PR: {final_url}")
+            message = f"✅ Selected the best PR:\n`{best_pr_url}`"
+            logger.info(f"Selected the best PR: {best_pr_url}")
             yield message
-            return final_url
+            return best_pr_url
 
         except Exception as e:
-            message = f"❌ Error during agent execution: {e}\nUsing default PR."
+            message = f"❌ Error during PR search: {e}\nUsing default PR."
             logger.error(message, exc_info=True)
             yield message
             return DEFAULT_FALLBACK_PR_URL

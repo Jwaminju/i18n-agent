@@ -2,8 +2,7 @@ import re
 import string
 
 import requests
-from langchain.callbacks import get_openai_callback
-from langchain_anthropic import ChatAnthropic
+from transformers import pipeline, AutoModelForSeq2SeqLM, AutoTokenizer
 
 from translator.prompt_glossary import PROMPT_WITH_GLOSSARY
 from translator.project_config import get_project_config
@@ -166,11 +165,18 @@ def fill_scaffold(content: str, to_translate: str, translated: str) -> str:
     return translated_doc
 
 
-def llm_translate(to_translate: str) -> tuple[str, str]:
-    with get_openai_callback() as cb:
-        model = ChatAnthropic(
-            model="claude-sonnet-4-20250514", max_tokens=64000, streaming=True
-        )
-        ai_message = model.invoke(to_translate)
-        print("cb:", cb)
-    return str(cb), ai_message.content
+def llm_translate(to_translate: str, huggingface_model_name: str) -> tuple[str, str]:
+    try:
+        model = AutoModelForSeq2SeqLM.from_pretrained(huggingface_model_name)
+        tokenizer = AutoTokenizer.from_pretrained(huggingface_model_name)
+        translator = pipeline("translation", model=model, tokenizer=tokenizer)
+        
+        # The prompt already contains the source text, so we just pass it to the translator
+        result = translator(to_translate, max_length=512)
+        translated_content = result[0]['translation_text']
+        
+        # Placeholder for callback result, as transformers pipeline doesn't provide token usage directly
+        status_message = f"✅ Translation completed using Hugging Face model: {huggingface_model_name}"
+        return status_message, translated_content
+    except Exception as e:
+        return f"❌ Hugging Face Translation failed: {str(e)}", ""

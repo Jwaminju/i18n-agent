@@ -5,6 +5,16 @@ import os
 
 import gradio as gr
 from dotenv import load_dotenv
+from transformers import pipeline, AutoModelForSeq2SeqLM, AutoTokenizer
+
+# 기본 모델 목록
+default_models = {
+    "OPUS-MT: ko -> en": "Helsinki-NLP/opus-mt-ko-en",
+    "OPUS-MT: en -> ko": "Helsinki-NLP/opus-mt-tc-big-en-ko",
+    "Iris-7B (한<->영)": "davidkim205/iris-7b",
+    "Synatra-7B 번역": "maywell/Synatra-7B-v0.3-Translation"
+}
+
 
 from agent.handler import (
     approve_handler,
@@ -138,10 +148,19 @@ with gr.Blocks(
                 gr.Markdown("### ⚙️ Configuration")
                 
                 with gr.Accordion("🔧 API & GitHub Settings", open=True):
-                    config_anthropic_key = gr.Textbox(
-                        label="🔑 Anthropic API Key",
+                    config_huggingface_key = gr.Textbox(
+                        label="🔑 Hugging Face API Key (Optional, for private models)",
                         type="password",
-                        placeholder="sk-ant-...",
+                        placeholder="hf_...",
+                    )
+                    config_huggingface_model_select = gr.Dropdown(
+                        choices=list(default_models.keys()),
+                        value=list(default_models.keys())[0],
+                        label="Hugging Face Model 선택",
+                    )
+                    config_huggingface_model_input = gr.Textbox(
+                        label="또는 Hugging Face 모델 이름 입력 (예: 'Helsinki-NLP/opus-mt-ko-en')",
+                        placeholder="Hugging Face 모델 ID를 입력하세요...",
                     )
                     config_github_token = gr.Textbox(
                         label="🔑 GitHub Token (Required for PR, Optional for file search)",
@@ -303,7 +322,7 @@ with gr.Blocks(
     # Button event handlers
     start_translate_btn.click(
         fn=start_translate_handler,
-        inputs=[chatbot, file_to_translate_input, additional_instruction, force_retranslate],
+        inputs=[chatbot, file_to_translate_input, additional_instruction, force_retranslate, final_huggingface_model_name],
         outputs=[chatbot, msg_input, status_display, control_tabs, start_translate_btn, confirm_upload_btn],
     )
     
@@ -316,8 +335,25 @@ with gr.Blocks(
     # Configuration Save
     save_config_btn.click(
         fn=update_persistent_config,
-        inputs=[config_anthropic_key, config_github_token, config_github_owner, config_github_repo, reference_pr_url, chatbot],
+        inputs=[config_huggingface_key, config_huggingface_model_select, config_huggingface_model_input, config_github_token, config_github_owner, config_github_repo, reference_pr_url, chatbot],
         outputs=[chatbot, msg_input, status_display],
+    )
+
+    def get_model_name(model_select, model_input):
+        return model_input if model_input else default_models[model_select]
+
+    final_huggingface_model_name = gr.State(value="")
+
+    config_huggingface_model_select.change(
+        fn=get_model_name,
+        inputs=[config_huggingface_model_select, config_huggingface_model_input],
+        outputs=[final_huggingface_model_name],
+    )
+
+    config_huggingface_model_input.change(
+        fn=get_model_name,
+        inputs=[config_huggingface_model_select, config_huggingface_model_input],
+        outputs=[final_huggingface_model_name],
     )
 
     approve_btn.click(

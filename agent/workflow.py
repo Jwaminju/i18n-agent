@@ -94,6 +94,9 @@ def translate_docs(lang: str, file_path: str, additional_instruction: str = "", 
     callback_result, translated_content = llm_translate(to_translate_with_prompt)
     print("translated_content:\n")
     print(translated_content)
+    if translated_content.startswith("```md\n") and translated_content.endswith("```"):
+        print("Satisfied translated_content.startswith ``` md")
+        translated_content = translated_content[5:-3].strip()
     # step 4. Add scaffold to translation result
     translated_doc = fill_scaffold(content, to_translate, translated_content)
     print("translated_doc:\n")

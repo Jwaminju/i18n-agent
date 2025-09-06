@@ -6,4 +6,6 @@ python-dotenv
 langchain
 PyGithub
 langchain-core
-langchain-community 
+langchain-community
+boto3
+PyYAML

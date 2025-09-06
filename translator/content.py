@@ -1,9 +1,12 @@
+import os
 import re
 import string
 
 import requests
 from langchain.callbacks import get_openai_callback
 from langchain_anthropic import ChatAnthropic
+import boto3
+import json
 
 from translator.prompt_glossary import PROMPT_WITH_GLOSSARY
 from translator.project_config import get_project_config
@@ -167,10 +170,45 @@ def fill_scaffold(content: str, to_translate: str, translated: str) -> str:
 
 
 def llm_translate(to_translate: str) -> tuple[str, str]:
-    with get_openai_callback() as cb:
+    anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY")
+    aws_bearer_token_bedrock = os.environ.get("AWS_BEARER_TOKEN_BEDROCK")
+
+    if anthropic_api_key:
+        # Use Anthropic API Key
         model = ChatAnthropic(
             model="claude-sonnet-4-20250514", max_tokens=64000, streaming=True
         )
         ai_message = model.invoke(to_translate)
-        print("cb:", cb)
-    return str(cb), ai_message.content
+        cb = "Anthropic API Key used"
+        return str(cb), ai_message.content
+
+    elif aws_bearer_token_bedrock:
+        # Use AWS Bedrock with bearer token (assuming standard AWS credential chain is configured)
+        # Note: boto3 does not directly use a 'bearer_token' named environment variable for SigV4 authentication.
+        # It relies on AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN, or IAM roles.
+        # If AWS_BEARER_TOKEN_BEDROCK is meant to be one of these, it should be renamed accordingly.
+        # For now, we proceed assuming standard AWS credential chain is configured to pick up credentials.
+        client = boto3.client("bedrock-runtime", region_name="eu-north-1")
+
+        body = {
+            "messages": [
+                {"role": "user", "content": to_translate}
+            ],
+            "max_tokens": 128000,
+            "anthropic_version": "bedrock-2023-05-31"
+        }
+
+        response = client.invoke_model(
+            modelId="arn:aws:bedrock:eu-north-1:235729104418:inference-profile/eu.anthropic.claude-3-7-sonnet-20250219-v1:0",
+            contentType="application/json",
+            accept="application/json",
+            body=json.dumps(body),
+        )
+        result = json.loads(response["body"].read())
+        cb = result["usage"]
+        ai_message = result["content"][0]["text"]
+
+        return str(cb), ai_message
+
+    else:
+        raise ValueError("No API key found for translation. Please set ANTHROPIC_API_KEY or AWS_BEARER_TOKEN_BEDROCK environment variable.")

@@ -138,10 +138,23 @@ with gr.Blocks(
                 gr.Markdown("### ⚙️ Configuration")
                 
                 with gr.Accordion("🔧 API & GitHub Settings", open=True):
+                    api_provider_radio = gr.Radio(
+                        ["Anthropic", "AWS Bedrock"],
+                        label="Select API Provider",
+                        value="Anthropic", # Default selection
+                        interactive=True,
+                    )
                     config_anthropic_key = gr.Textbox(
                         label="🔑 Anthropic API Key",
                         type="password",
                         placeholder="sk-ant-...",
+                        visible=True, # Initially visible as Anthropic is default
+                    )
+                    config_aws_bearer_token_bedrock = gr.Textbox(
+                        label="🔑 AWS Bearer Token for Bedrock",
+                        type="password",
+                        placeholder="AWS_BEARER_TOKEN_BEDROCK",
+                        visible=False, # Initially hidden
                     )
                     config_github_token = gr.Textbox(
                         label="🔑 GitHub Token (Required for PR, Optional for file search)",
@@ -316,8 +329,18 @@ with gr.Blocks(
     # Configuration Save
     save_config_btn.click(
         fn=update_persistent_config,
-        inputs=[config_anthropic_key, config_github_token, config_github_owner, config_github_repo, reference_pr_url, chatbot],
+        inputs=[api_provider_radio, config_anthropic_key, config_aws_bearer_token_bedrock, config_github_token, config_github_owner, config_github_repo, reference_pr_url, chatbot],
         outputs=[chatbot, msg_input, status_display],
+    )
+
+    # API Provider selection handler
+    api_provider_radio.change(
+        fn=lambda provider: (
+            gr.update(visible=True) if provider == "Anthropic" else gr.update(visible=False),
+            gr.update(visible=True) if provider == "AWS Bedrock" else gr.update(visible=False),
+        ),
+        inputs=[api_provider_radio],
+        outputs=[config_anthropic_key, config_aws_bearer_token_bedrock],
     )
 
     approve_btn.click(

@@ -11,6 +11,7 @@ from typing import Optional, Dict, List, Tuple, Any
 
 # Load environment variables from .env file
 from dotenv import load_dotenv
+from translator.content import llm_translate
 
 load_dotenv()
 
@@ -259,8 +260,8 @@ class GitHubPRAgent:
     ) -> str:
         """Generate text using LLM."""
         try:
-            response = self.llm.invoke(prompt)
-            generated = response.content.strip()
+            _usage_info, generated = llm_translate(prompt)
+            generated = generated.strip()
             print(f"LLM generated {operation}: {generated}")
             return generated
         except Exception as e:
@@ -271,25 +272,10 @@ class GitHubPRAgent:
     def generate_branch_name_from_reference(
         self, reference_branch_name: str, target_language: str, file_name: str
     ) -> str:
-        """Use LLM to analyze reference PR information and generate appropriate branch name."""
-        prompt = f"""Here is the reference PR information:
-
-Reference PR branch name: {reference_branch_name}
-
-Now I need to generate a branch name for a new translation task:
-- Target language: {target_language}
-- File to translate: {file_name}
-
-Please analyze the pattern and style of the reference PR title to generate a consistent new branch name.
-
-Requirements:
-1. Follow the naming conventions and patterns of the reference PR
-2. Appropriately reflect the target language ({target_language}) and file name ({file_name}) if applicable
-
-Please return only the branch name. No other explanation is needed."""
-
-        fallback = f"translate-{target_language}-{file_name.replace('_', '-')}"
-        return self._generate_with_llm(prompt, fallback, "branch name")
+        """Generate branch name using simple template."""
+        # Keep .md extension and make branch-safe
+        branch_safe_name = file_name.replace('_', '-')
+        return f"{target_language}-{branch_safe_name}"
 
     def generate_pr_content_from_reference(
         self,
@@ -328,8 +314,8 @@ Title: [PR title here]
 Body: [PR body here, maintaining the exact markdown format and structure of the original]"""
 
         try:
-            response = self.llm.invoke(prompt)
-            generated_content = response.content.strip()
+            _usage_info, generated_content = llm_translate(prompt)
+            generated_content = generated_content.strip()
 
             # Separate title and body from response
             lines = generated_content.split("\n")
@@ -370,47 +356,46 @@ Body: [PR body here, maintaining the exact markdown format and structure of the 
         self, target_language: str, filepath: str, target_filepath: str, file_name: str
     ) -> Tuple[str, str]:
         """Generate default PR content."""
-        title = f"[i18n-{target_language}] Add {target_language} translation for {file_name}"
-        body = f"""## Summary
-Add {target_language} translation for `{filepath}`.
+        title = f"🌐 [i18n-{target_language}] Translated `{file_name}` to {target_language}"
+        body = f"""# What does this PR do?
 
-## Changes
-- Add {target_language} translation: `{target_filepath}`
-- Original file: `{filepath}`
+Translated the `{filepath}` file of the documentation to {target_language} 😄 
+Thank you in advance for your review!
+
+Part of https://github.com/huggingface/transformers/issues/20179
+
+## Before reviewing
+- [x] Check for missing / redundant translations (번역 누락/중복 검사)
+- [x] Grammar Check (맞춤법 검사)
+- [x] Review or Add new terms to glossary (용어 확인 및 추가)
+- [x] Check Inline TOC (e.g. `[[lowercased-header]]`)
+- [x] Check live-preview for gotchas (live-preview로 정상작동 확인)
+
+## Who can review? (Initial)
+{target_language} translation reviewers
+
+## Before submitting
+- [x] This PR fixes a typo or improves the docs (you can dismiss the other checks if that's the case).
+- [x] Did you read the [contributor guideline](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md#start-contributing-pull-requests),
+      Pull Request section?
+- [ ] Was this discussed/approved via a Github issue or the [forum](https://discuss.huggingface.co/)? Please add a link
+      to it if that's the case.
+- [x] Did you make sure to update the documentation with your changes? Here are the
+      [documentation guidelines](https://github.com/huggingface/transformers/tree/main/docs), and
+      [here are tips on formatting docstrings](https://github.com/huggingface/transformers/tree/main/docs#writing-source-documentation).
+- [ ] Did you write any new necessary tests?
+
+## Who can review? (Final)
+ May you please review this PR?
+Documentation maintainers
 """
         return title, body
 
     def generate_commit_message_from_reference(
         self, commit_messages: List[str], target_language: str, file_name: str
     ) -> str:
-        """Use LLM to analyze reference PR commit messages and generate appropriate commit message."""
-        commits_text = (
-            "\n".join([f"- {msg}" for msg in commit_messages])
-            if commit_messages
-            else "None"
-        )
-
-        prompt = f"""Here are the commit messages from the reference PR:
-
-{commits_text}
-
-Now I need to generate a commit message for a new translation task:
-- Target language: {target_language}
-- File to translate: {file_name}
-
-Please analyze the commit message patterns and style of the reference PR to generate a consistent new commit message.
-
-Requirements:
-1. Follow the commit message style and format of the reference PR
-2. Appropriately reflect the target language ({target_language}) and file name ({file_name})
-3. Follow general Git commit message conventions
-4. Be concise and clear
-5. If you detect typos in the given commit messages, use corrected versions (e.g., dos -> docs)
-
-Please return only the commit message. No other explanation is needed."""
-
-        fallback = f"docs: add {target_language} translation for {file_name}"
-        return self._generate_with_llm(prompt, fallback, "commit message")
+        """Generate simple commit message using template."""
+        return f"docs: {target_language}: {file_name}"
 
     def get_branch_info(self, owner: str, repo_name: str, branch_name: str) -> str:
         """Get information about an existing branch."""
@@ -452,7 +437,7 @@ Please return only the commit message. No other explanation is needed."""
 
             # 2. Generate translation file path and branch name
             target_filepath = filepath.replace("/en/", f"/{target_language}/")
-            file_name = filepath.split("/")[-1].replace(".md", "")
+            file_name = filepath.split("/")[-1]  # Keep .md extension
 
             print(f"🌿 Generating branch name...")
             branch_name = self.generate_branch_name_from_reference(

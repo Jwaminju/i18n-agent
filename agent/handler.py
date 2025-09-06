@@ -33,6 +33,7 @@ class ChatState:
         # Persistent settings (preserved across restarts)
         self.persistent_settings = {
             "anthropic_api_key": "",
+            "aws_bearer_token_bedrock": "",
             "github_config": {
                 "token": "",
                 "owner": "",
@@ -374,14 +375,29 @@ def update_language_selection(lang, history):
     return history, "", update_status(), lang
 
 
-def update_persistent_config(anthropic_key, github_token, github_owner, github_repo, reference_pr_url, history):
+def update_persistent_config(api_provider, anthropic_key, aws_bearer_token_bedrock, github_token, github_owner, github_repo, reference_pr_url, history):
     """Update persistent configuration settings."""
     global state
     
-    # Update API keys
-    if anthropic_key:
+    # Update API keys based on provider selection
+    if api_provider == "Anthropic":
         state.persistent_settings["anthropic_api_key"] = anthropic_key
         os.environ["ANTHROPIC_API_KEY"] = anthropic_key
+        # Clear AWS Bedrock token if Anthropic is selected
+        state.persistent_settings["aws_bearer_token_bedrock"] = ""
+        os.environ.pop("AWS_BEARER_TOKEN_BEDROCK", None)
+    elif api_provider == "AWS Bedrock":
+        state.persistent_settings["aws_bearer_token_bedrock"] = aws_bearer_token_bedrock
+        os.environ["AWS_BEARER_TOKEN_BEDROCK"] = aws_bearer_token_bedrock
+        # Clear Anthropic key if AWS Bedrock is selected
+        state.persistent_settings["anthropic_api_key"] = ""
+        os.environ.pop("ANTHROPIC_API_KEY", None)
+    else:
+        # If no provider is selected or unknown, clear both
+        state.persistent_settings["anthropic_api_key"] = ""
+        os.environ.pop("ANTHROPIC_API_KEY", None)
+        state.persistent_settings["aws_bearer_token_bedrock"] = ""
+        os.environ.pop("AWS_BEARER_TOKEN_BEDROCK", None)
     
     if github_token:
         os.environ["GITHUB_TOKEN"] = github_token
@@ -406,8 +422,11 @@ def update_persistent_config(anthropic_key, github_token, github_owner, github_r
     response = "✅ Configuration saved!"
     if github_owner and github_repo:
         response += f" GitHub: {github_owner}/{github_repo}"
-    elif anthropic_key:
+    
+    if api_provider == "Anthropic" and anthropic_key:
         response += " Anthropic API key updated."
+    elif api_provider == "AWS Bedrock" and aws_bearer_token_bedrock:
+        response += " AWS Bedrock Bearer Token updated."
     
     history.append(["Configuration update", response])
     return history, "", update_status()
@@ -457,12 +476,20 @@ def send_message(message, history):
 def start_translate_handler(history, file_to_translate, additional_instruction="", force_retranslate=False):
     # Use persistent anthropic key
     anthropic_key = state.persistent_settings["anthropic_api_key"]
-    if not anthropic_key:
-        response = "❌ Please set Anthropic API key in Configuration panel first."
+    aws_bearer_token_bedrock = state.persistent_settings["aws_bearer_token_bedrock"]
+
+    if not anthropic_key and not aws_bearer_token_bedrock:
+        response = "❌ Please set either Anthropic API key or AWS Bearer Token for Bedrock in Configuration panel first."
         history.append(["Translation request", response])
         return history, "", update_status(), gr.Tabs(), gr.update(), gr.update()
     
-    os.environ["ANTHROPIC_API_KEY"] = anthropic_key
+    # Set the active API key to environment variable for translator.content.py
+    if anthropic_key:
+        os.environ["ANTHROPIC_API_KEY"] = anthropic_key
+        os.environ.pop("AWS_BEARER_TOKEN_BEDROCK", None) # Ensure only one is active
+    elif aws_bearer_token_bedrock:
+        os.environ["AWS_BEARER_TOKEN_BEDROCK"] = aws_bearer_token_bedrock
+        os.environ.pop("ANTHROPIC_API_KEY", None) # Ensure only one is active
     
     # Check if file path is provided
     if not file_to_translate or not file_to_translate.strip():
@@ -602,6 +629,8 @@ def restart_handler(history):
     # Restore environment variables
     if backup_settings["anthropic_api_key"]:
         os.environ["ANTHROPIC_API_KEY"] = backup_settings["anthropic_api_key"]
+    if backup_settings["aws_bearer_token_bedrock"]:
+        os.environ["AWS_BEARER_TOKEN_BEDROCK"] = backup_settings["aws_bearer_token_bedrock"]
     if backup_settings["github_config"]["token"]:
         os.environ["GITHUB_TOKEN"] = backup_settings["github_config"]["token"]
     
